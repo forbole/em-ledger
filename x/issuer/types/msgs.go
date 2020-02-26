@@ -6,6 +6,7 @@ package types
 
 import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 )
 
 var (
@@ -44,13 +45,15 @@ func (msg MsgSetInflation) Route() string { return ModuleName }
 
 func (msg MsgSetInflation) Type() string { return "setInflation" }
 
-func (msg MsgSetInflation) ValidateBasic() sdk.Error {
+func (msg MsgSetInflation) ValidateBasic() error {
 	if msg.InflationRate.IsNegative() {
-		return ErrNegativeInflation()
+		return sdkerrors.Wrap(ErrNegativeInflation, "cannot set negative inflation")
+		//return ErrNegativeInflation()
 	}
 
 	if msg.Issuer.Empty() {
-		return sdk.ErrInvalidAddress("missing issuer address")
+		return sdkerrors.Wrap(sdkerrors.ErrInvalidAddress, "missing issuer address")
+		//return sdk.ErrInvalidAddress("missing issuer address")
 	}
 
 	return nil
@@ -68,13 +71,15 @@ func (msg MsgRevokeLiquidityProvider) Route() string { return ModuleName }
 
 func (msg MsgRevokeLiquidityProvider) Type() string { return "revokeLiquidityProvider" }
 
-func (msg MsgRevokeLiquidityProvider) ValidateBasic() sdk.Error {
+func (msg MsgRevokeLiquidityProvider) ValidateBasic() error {
 	if msg.LiquidityProvider.Empty() {
-		return sdk.ErrInvalidAddress("missing liquidity provider address")
+		return sdkerrors.Wrap(sdkerrors.ErrInvalidAddress, "missing liquidity provider address")
+		//return sdk.ErrInvalidAddress("missing liquidity provider address")
 	}
 
 	if msg.Issuer.Empty() {
-		return sdk.ErrInvalidAddress("missing issuer address")
+		return sdkerrors.Wrap(sdkerrors.ErrInvalidAddress, "missing issuer address")
+		//return sdk.ErrInvalidAddress("missing issuer address")
 	}
 
 	return nil
@@ -92,17 +97,20 @@ func (msg MsgDecreaseMintable) Route() string { return ModuleName }
 
 func (msg MsgDecreaseMintable) Type() string { return "decreaseMintable" }
 
-func (msg MsgDecreaseMintable) ValidateBasic() sdk.Error {
+func (msg MsgDecreaseMintable) ValidateBasic() error {
 	if msg.LiquidityProvider.Empty() {
-		return sdk.ErrInvalidAddress("missing liquidity provider address")
+		return sdkerrors.Wrap(sdkerrors.ErrInvalidAddress, "missing liquidity provider address")
+		//return sdk.ErrInvalidAddress("missing liquidity provider address")
 	}
 
 	if msg.Issuer.Empty() {
-		return sdk.ErrInvalidAddress("missing issuer address")
+		return sdkerrors.Wrap(sdkerrors.ErrInvalidAddress, "missing issuer address")
+		//return sdk.ErrInvalidAddress("missing issuer address")
 	}
 
 	if !msg.MintableDecrease.IsValid() {
-		return sdk.ErrInvalidCoins("requested decrease is invalid: " + msg.MintableDecrease.String())
+		return sdkerrors.Wrapf(sdkerrors.ErrInvalidCoins, "requested decrease is invalid: %v", msg.MintableDecrease.String())
+		//return sdk.ErrInvalidCoins("requested decrease is invalid: " + msg.MintableDecrease.String())
 	}
 
 	return nil
@@ -120,17 +128,20 @@ func (msg MsgIncreaseMintable) Route() string { return ModuleName }
 
 func (msg MsgIncreaseMintable) Type() string { return "increaseMintable" }
 
-func (msg MsgIncreaseMintable) ValidateBasic() sdk.Error {
+func (msg MsgIncreaseMintable) ValidateBasic() error {
 	if msg.LiquidityProvider.Empty() {
-		return sdk.ErrInvalidAddress("missing liquidity provider address")
+		return sdkerrors.Wrap(sdkerrors.ErrInvalidAddress, "missing liquidity provider address")
+		//return sdk.ErrInvalidAddress("missing liquidity provider address")
 	}
 
 	if msg.Issuer.Empty() {
-		return sdk.ErrInvalidAddress("missing issuer address")
+		return sdkerrors.Wrap(sdkerrors.ErrInvalidAddress, "missing issuer address")
+		//return sdk.ErrInvalidAddress("missing issuer address")
 	}
 
 	if !msg.MintableIncrease.IsValid() {
-		return sdk.ErrInvalidCoins("mintable increase is invalid: " + msg.MintableIncrease.String())
+		return sdkerrors.Wrapf(sdkerrors.ErrInvalidCoins, "mintable increase is invalid: "+msg.MintableIncrease.String())
+		//return sdk.ErrInvalidCoins("mintable increase is invalid: " + msg.MintableIncrease.String())
 	}
 
 	return nil

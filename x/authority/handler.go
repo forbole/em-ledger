@@ -5,7 +5,7 @@
 package authority
 
 import (
-	"fmt"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 
 	"github.com/e-money/em-ledger/x/authority/types"
 
@@ -13,19 +13,18 @@ import (
 )
 
 func newHandler(keeper Keeper) sdk.Handler {
-	return func(ctx sdk.Context, msg sdk.Msg) (result sdk.Result) {
-		defer func() {
-			if r := recover(); r != nil {
-				switch o := r.(type) {
-				case sdk.Result:
-					result = o
-				case sdk.Error:
-					result = o.Result()
-				default:
-					panic(r)
-				}
-			}
-		}()
+	return func(ctx sdk.Context, msg sdk.Msg) (result *sdk.Result, err error) {
+		// TODO Determine whether this is actually needed.
+		//defer func() {
+		//	if r := recover(); r != nil {
+		//		switch o := r.(type) {
+		//		case *sdk.Result:
+		//			result = o
+		//		default:
+		//			panic(r)
+		//		}
+		//	}
+		//}()
 
 		switch msg := msg.(type) {
 		case types.MsgCreateIssuer:
@@ -35,8 +34,7 @@ func newHandler(keeper Keeper) sdk.Handler {
 		case types.MsgSetGasPrices:
 			return keeper.SetGasPrices(ctx, msg.Authority, msg.GasPrices)
 		default:
-			errMsg := fmt.Sprintf("Unrecognized inflation Msg type: %v", msg.Type())
-			return sdk.ErrUnknownRequest(errMsg).Result()
+			return nil, sdkerrors.Wrapf(sdkerrors.ErrUnknownRequest, "unrecognized %s message type: %T", ModuleName, msg)
 		}
 	}
 }
