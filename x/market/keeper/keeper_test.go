@@ -24,8 +24,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	abci "github.com/tendermint/tendermint/abci/types"
-	cmn "github.com/tendermint/tendermint/libs/common"
 	"github.com/tendermint/tendermint/libs/log"
+	"github.com/tendermint/tendermint/libs/rand"
 	dbm "github.com/tendermint/tm-db"
 )
 
@@ -847,7 +847,7 @@ func createAccount(ctx sdk.Context, ak auth.AccountKeeper, address, balance stri
 
 // Generate a random string to use as a client order id
 func cid() string {
-	return cmn.RandStr(10)
+	return rand.Str(10)
 }
 
 func dumpEvents(events sdk.Events) {

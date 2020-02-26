@@ -37,7 +37,7 @@ import (
 	tcmd "github.com/tendermint/tendermint/cmd/tendermint/commands"
 	cfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/libs/common"
+	"github.com/tendermint/tendermint/libs/rand"
 	"github.com/tendermint/tendermint/p2p"
 	tmtypes "github.com/tendermint/tendermint/types"
 )
@@ -121,7 +121,7 @@ func initializeTestnet(
 	}
 
 	if chainID == "" {
-		chainID = fmt.Sprintf("emoney-%v", common.RandStr(6))
+		chainID = fmt.Sprintf("emoney-%v", rand.Str(6))
 	}
 
 	genDoc := &tmtypes.GenesisDoc{
