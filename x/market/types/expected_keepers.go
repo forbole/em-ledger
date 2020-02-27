@@ -20,7 +20,8 @@ type (
 	}
 
 	BankKeeper interface {
-		InputOutputCoins(ctx sdk.Context, inputs []bank.Input, outputs []bank.Output) sdk.Error
+		InputOutputCoins(ctx sdk.Context, inputs []bank.Input, outputs []bank.Output) error
+		SpendableCoins(ctx sdk.Context, addr sdk.AccAddress) sdk.Coins
 	}
 
 	SupplyKeeper interface {

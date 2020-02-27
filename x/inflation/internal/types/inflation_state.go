@@ -35,7 +35,17 @@ type InflationState struct {
 }
 
 func ParamKeyTable() params.KeyTable {
-	return params.NewKeyTable().RegisterType(KeyParams, InflationState{})
+	paramSetPair := params.NewParamSetPair(KeyParams, InflationState{}, validateInflationState)
+	return params.NewKeyTable().RegisterType(paramSetPair)
+}
+
+func validateInflationState(i interface{}) error {
+	v, ok := i.(InflationState)
+	if !ok {
+		return fmt.Errorf("invalid parameter type: %T", i)
+	}
+
+	return ValidateInflationState(v)
 }
 
 func NewInflationState(assets ...string) InflationState {

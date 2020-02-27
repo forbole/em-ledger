@@ -51,9 +51,8 @@ func (acc LiquidityProviderAccount) String() string {
   Address:       %s
   Pubkey:        %s
   Mintable:      %s
-  Coins:         %s
   AccountNumber: %d
   Sequence:      %d`,
-		acc.GetAddress(), pubkey, acc.Mintable, acc.GetCoins(), acc.GetAccountNumber(), acc.GetSequence(),
+		acc.GetAddress(), pubkey, acc.Mintable, acc.GetAccountNumber(), acc.GetSequence(),
 	)
 }
