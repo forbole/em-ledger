@@ -7,6 +7,7 @@ package distribution
 import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/x/auth"
+	"github.com/cosmos/cosmos-sdk/x/bank"
 	distr "github.com/cosmos/cosmos-sdk/x/distribution"
 	"github.com/cosmos/cosmos-sdk/x/supply"
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -22,7 +23,7 @@ var (
 
 // set the proposer for determining distribution during endblock
 // and distribute rewards for the previous block
-func BeginBlocker(ctx sdk.Context, req abci.RequestBeginBlock, k distr.Keeper, sk supply.Keeper, db db.DB, batch db.Batch) {
+func BeginBlocker(ctx sdk.Context, req abci.RequestBeginBlock, k distr.Keeper, sk supply.Keeper, bk bank.ViewKeeper, db db.DB, batch db.Batch) {
 	// determine the total power signing the block
 	var previousTotalPower, sumPreviousPrecommitPower int64
 	for _, voteInfo := range req.LastCommitInfo.GetVotes() {
@@ -32,13 +33,17 @@ func BeginBlocker(ctx sdk.Context, req abci.RequestBeginBlock, k distr.Keeper, s
 		}
 	}
 
-	previousProposer := db.Get(previousProposerKey)
+	previousProposer, err := db.Get(previousProposerKey)
+	if err != nil {
+		panic(err)
+	}
 
 	// TODO this is Tendermint-dependent
 	// ref https://github.com/cosmos/cosmos-sdk/issues/3095
 	if ctx.BlockHeight() > 1 {
 		feeCollector := sk.GetModuleAccount(ctx, auth.FeeCollectorName)
-		coins := feeCollector.GetCoins()
+		//coins := feeCollector.GetCoins()
+		coins := bk.GetAllBalances(ctx, feeCollector.GetAddress())
 
 		// Only call AllocateTokens if there are in fact tokens to allocate.
 		if !coins.IsZero() {
@@ -46,6 +51,6 @@ func BeginBlocker(ctx sdk.Context, req abci.RequestBeginBlock, k distr.Keeper, s
 		}
 	}
 
-	previousProposer = sdk.ConsAddress(req.Header.ProposerAddress)
+	previousProposer = req.Header.ProposerAddress
 	batch.Set(previousProposerKey, previousProposer)
 }

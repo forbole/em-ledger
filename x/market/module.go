@@ -51,12 +51,12 @@ func (amb AppModuleBasic) RegisterCodec(cdc *codec.Codec) {
 	types.RegisterCodec(cdc)
 }
 
-func (amb AppModuleBasic) DefaultGenesis() (_ json.RawMessage) {
+func (amb AppModuleBasic) DefaultGenesis(_ codec.JSONMarshaler) (_ json.RawMessage) {
 	// Market data will never be part of a hard fork.
 	return
 }
 
-func (amb AppModuleBasic) ValidateGenesis(json.RawMessage) error {
+func (amb AppModuleBasic) ValidateGenesis(codec.JSONMarshaler, json.RawMessage) error {
 	// Market data will never be part of a hard fork.
 	return nil
 }
@@ -74,12 +74,12 @@ func (amb AppModuleBasic) GetQueryCmd(cdc *codec.Codec) *cobra.Command {
 	return cli.GetQueryCmd(cdc)
 }
 
-func (am AppModule) InitGenesis(sdk.Context, json.RawMessage) (_ []abci.ValidatorUpdate) {
+func (am AppModule) InitGenesis(sdk.Context, codec.JSONMarshaler, json.RawMessage) (_ []abci.ValidatorUpdate) {
 	// Market data will never be part of a hard fork.
 	return
 }
 
-func (am AppModule) ExportGenesis(sdk.Context) (_ json.RawMessage) {
+func (am AppModule) ExportGenesis(sdk.Context, codec.JSONMarshaler) (_ json.RawMessage) {
 	// Market data will never be part of a hard fork.
 	return
 }

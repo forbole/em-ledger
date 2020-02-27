@@ -126,7 +126,8 @@ func (k Keeper) MustBeAuthority(ctx sdk.Context, address sdk.AccAddress) {
 		return
 	}
 
-	panic(types.ErrNotAuthority(address.String()))
+	panic(sdkerrors.Wrap(types.ErrNotAuthority, address.String()))
+	//panic(types.ErrNotAuthority(address.String()))
 }
 
 func (k Keeper) SetRestrictedDenoms(ctx sdk.Context, denoms emtypes.RestrictedDenoms) {

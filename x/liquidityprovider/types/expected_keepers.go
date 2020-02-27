@@ -13,3 +13,7 @@ type AccountKeeper interface {
 	GetAccount(sdk.Context, sdk.AccAddress) exported.Account
 	SetAccount(sdk.Context, exported.Account)
 }
+
+type BankKeeper interface {
+	SpendableCoins(ctx sdk.Context, addr sdk.AccAddress) sdk.Coins
+}

@@ -19,12 +19,14 @@ import (
 
 type Keeper struct {
 	authKeeper   types.AccountKeeper
+	bankKeeper   types.BankKeeper
 	supplyKeeper supply.Keeper
 }
 
-func NewKeeper(ak types.AccountKeeper, sk supply.Keeper) Keeper {
+func NewKeeper(ak types.AccountKeeper, bk types.BankKeeper, sk supply.Keeper) Keeper {
 	return Keeper{
 		authKeeper:   ak,
+		bankKeeper:   bk,
 		supplyKeeper: sk,
 	}
 }
@@ -58,9 +60,11 @@ func (k Keeper) BurnTokensFromBalance(ctx sdk.Context, liquidityProvider sdk.Acc
 		//return sdk.ErrUnknownAddress(fmt.Sprintf("account %s is not a liquidity provider or does not exist", liquidityProvider.String())).Result()
 	}
 
-	_, anynegative := account.BaseAccount.SpendableCoins(ctx.BlockTime()).SafeSub(amount)
+	spendable := k.bankKeeper.SpendableCoins(ctx, account.Address)
+	_, anynegative := spendable.SafeSub(amount)
+	//_, anynegative := account.BaseAccount.SpendableCoins(ctx.BlockTime()).SafeSub(amount)
 	if anynegative {
-		return nil, sdkerrors.Wrapf(sdkerrors.ErrInsufficientFunds, "Insufficient balance for burn operation: %s < %s", account.BaseAccount.GetCoins(), amount)
+		return nil, sdkerrors.Wrapf(sdkerrors.ErrInsufficientFunds, "Insufficient balance for burn operation: %s < %s", spendable, amount)
 		//return sdk.ErrInsufficientCoins(fmt.Sprintf("Insufficient balance for burn operation: %s < %s", account.Account.GetCoins(), amount)).Result()
 	}
 

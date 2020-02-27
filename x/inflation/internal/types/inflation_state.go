@@ -11,6 +11,7 @@ import (
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/x/params"
+	paramtypes "github.com/cosmos/cosmos-sdk/x/params/types"
 )
 
 // Parameter store keys
@@ -34,9 +35,16 @@ type InflationState struct {
 	InflationAssets   InflationAssets `json:"assets" yaml:"assets"`
 }
 
+func (is InflationState) ParamSetPairs() paramtypes.ParamSetPairs {
+	return paramtypes.ParamSetPairs{
+		paramtypes.NewParamSetPair(KeyParams, &is, validateInflationState),
+	}
+}
+
 func ParamKeyTable() params.KeyTable {
-	paramSetPair := params.NewParamSetPair(KeyParams, InflationState{}, validateInflationState)
-	return params.NewKeyTable().RegisterType(paramSetPair)
+	return paramtypes.NewKeyTable().RegisterParamSet(InflationState{})
+	//paramSetPair := params.NewParamSetPair(KeyParams, InflationState{}, validateInflationState)
+	//return params.NewKeyTable().RegisterType(paramSetPair)
 }
 
 func validateInflationState(i interface{}) error {

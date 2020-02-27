@@ -36,11 +36,11 @@ func (amb AppModuleBasic) RegisterCodec(cdc *codec.Codec) {
 	types.RegisterCodec(cdc)
 }
 
-func (amb AppModuleBasic) DefaultGenesis() json.RawMessage {
-	return ModuleCdc.MustMarshalJSON(DefaultGenesisState())
+func (amb AppModuleBasic) DefaultGenesis(cdc codec.JSONMarshaler) json.RawMessage {
+	return cdc.MustMarshalJSON(DefaultGenesisState())
 }
 
-func (amb AppModuleBasic) ValidateGenesis(json.RawMessage) error {
+func (amb AppModuleBasic) ValidateGenesis(codec.JSONMarshaler, json.RawMessage) error {
 	return nil
 }
 
@@ -62,21 +62,21 @@ func NewAppModule(keeper Keeper) *AppModule {
 	}
 }
 
-func (am AppModule) InitGenesis(ctx sdk.Context, data json.RawMessage) (_ []abci.ValidatorUpdate) {
+func (am AppModule) InitGenesis(ctx sdk.Context, cdc codec.JSONMarshaler, data json.RawMessage) (_ []abci.ValidatorUpdate) {
 	var genesisState GenesisState
-	ModuleCdc.MustUnmarshalJSON(data, &genesisState)
+	cdc.MustUnmarshalJSON(data, &genesisState)
 	InitGenesis(ctx, am.keeper, genesisState)
 
 	return
 }
 
-func (am AppModule) ExportGenesis(ctx sdk.Context) json.RawMessage {
+func (am AppModule) ExportGenesis(ctx sdk.Context, cdc codec.JSONMarshaler) json.RawMessage {
 	genesis := GenesisState{
 		AuthorityKey:     am.keeper.GetAuthority(ctx),
 		RestrictedDenoms: am.keeper.GetRestrictedDenoms(ctx),
 		MinGasPrices:     am.keeper.GetGasPrices(ctx),
 	}
-	return ModuleCdc.MustMarshalJSON(genesis)
+	return cdc.MustMarshalJSON(genesis)
 }
 
 func (am AppModule) RegisterInvariants(sdk.InvariantRegistry) {}
