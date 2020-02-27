@@ -5,12 +5,13 @@
 package cli
 
 import (
-	"github.com/cosmos/cosmos-sdk/client"
+	"bufio"
 	"github.com/cosmos/cosmos-sdk/client/context"
+	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/x/auth"
-	"github.com/cosmos/cosmos-sdk/x/auth/client/utils"
+	"github.com/cosmos/cosmos-sdk/x/auth/client"
 	"github.com/e-money/em-ledger/util"
 	"github.com/e-money/em-ledger/x/authority/types"
 
@@ -25,7 +26,7 @@ func GetTxCmd(cdc *codec.Codec) *cobra.Command {
 	}
 
 	authorityCmds.AddCommand(
-		client.PostCommands(
+		flags.PostCommands(
 			getCmdCreateIssuer(cdc),
 			getCmdDestroyIssuer(cdc),
 			getCmdSetGasPrices(cdc),
@@ -42,7 +43,8 @@ func getCmdSetGasPrices(cdc *codec.Codec) *cobra.Command {
 		Short:   "Control the minimum gas prices for the chain",
 		Args:    cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			txBldr := auth.NewTxBuilderFromCLI().WithTxEncoder(utils.GetTxEncoder(cdc))
+			inBuf := bufio.NewReader(cmd.InOrStdin())
+			txBldr := auth.NewTxBuilderFromCLI(inBuf).WithTxEncoder(client.GetTxEncoder(cdc))
 			cliCtx := context.NewCLIContextWithFrom(args[0]).WithCodec(cdc)
 
 			gasPrices, err := sdk.ParseDecCoins(args[1])
@@ -55,7 +57,7 @@ func getCmdSetGasPrices(cdc *codec.Codec) *cobra.Command {
 				Authority: cliCtx.GetFromAddress(),
 			}
 
-			return utils.GenerateOrBroadcastMsgs(cliCtx, txBldr, []sdk.Msg{msg})
+			return client.GenerateOrBroadcastMsgs(cliCtx, txBldr, []sdk.Msg{msg})
 		},
 	}
 }
@@ -67,7 +69,8 @@ func getCmdCreateIssuer(cdc *codec.Codec) *cobra.Command {
 		Short:   "Create a new issuer",
 		Args:    cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			txBldr := auth.NewTxBuilderFromCLI().WithTxEncoder(utils.GetTxEncoder(cdc))
+			inBuf := bufio.NewReader(cmd.InOrStdin())
+			txBldr := auth.NewTxBuilderFromCLI(inBuf).WithTxEncoder(client.GetTxEncoder(cdc))
 			cliCtx := context.NewCLIContextWithFrom(args[0]).WithCodec(cdc)
 
 			issuerAddr, err := sdk.AccAddressFromBech32(args[1])
@@ -86,7 +89,7 @@ func getCmdCreateIssuer(cdc *codec.Codec) *cobra.Command {
 				Authority:     cliCtx.GetFromAddress(),
 			}
 
-			return utils.GenerateOrBroadcastMsgs(cliCtx, txBldr, []sdk.Msg{msg})
+			return client.GenerateOrBroadcastMsgs(cliCtx, txBldr, []sdk.Msg{msg})
 		},
 	}
 }
@@ -98,7 +101,8 @@ func getCmdDestroyIssuer(cdc *codec.Codec) *cobra.Command {
 		Short:   "Delete an issuer",
 		Args:    cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			txBldr := auth.NewTxBuilderFromCLI().WithTxEncoder(utils.GetTxEncoder(cdc))
+			inBuf := bufio.NewReader(cmd.InOrStdin())
+			txBldr := auth.NewTxBuilderFromCLI(inBuf).WithTxEncoder(client.GetTxEncoder(cdc))
 			cliCtx := context.NewCLIContextWithFrom(args[0]).WithCodec(cdc)
 
 			issuerAddr, err := sdk.AccAddressFromBech32(args[1])
@@ -111,7 +115,7 @@ func getCmdDestroyIssuer(cdc *codec.Codec) *cobra.Command {
 				Authority: cliCtx.GetFromAddress(),
 			}
 
-			return utils.GenerateOrBroadcastMsgs(cliCtx, txBldr, []sdk.Msg{msg})
+			return client.GenerateOrBroadcastMsgs(cliCtx, txBldr, []sdk.Msg{msg})
 		},
 	}
 }

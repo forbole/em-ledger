@@ -3,9 +3,7 @@ module github.com/e-money/em-ledger
 go 1.12
 
 require (
-	github.com/coreos/go-etcd v2.0.0+incompatible // indirect
 	github.com/cosmos/cosmos-sdk v0.34.4-0.20200224190540-bb7e803cb929
-	github.com/cpuguy83/go-md2man v1.0.10 // indirect
 	github.com/emirpasic/gods v1.12.0
 	github.com/gorilla/mux v1.7.4
 	github.com/onsi/ginkgo v1.7.0
@@ -18,7 +16,6 @@ require (
 	github.com/tendermint/tm-db v0.4.0
 	github.com/tidwall/gjson v1.3.2
 	github.com/tidwall/sjson v1.0.4
-	github.com/ugorji/go/codec v0.0.0-20181204163529-d75b2dcb6bc8 // indirect
 )
 
 // replace github.com/cosmos/cosmos-sdk => ./tmpvendor/cosmos-sdk

@@ -17,7 +17,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/x/auth"
-	"github.com/cosmos/cosmos-sdk/x/auth/client/utils"
+	"github.com/cosmos/cosmos-sdk/x/auth/client"
 	atypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	"github.com/cosmos/cosmos-sdk/x/bank"
 	rpcclient "github.com/tendermint/tendermint/rpc/client"
@@ -182,7 +182,7 @@ func sendTx(fromKey, toKey nt.Key, amount sdk.Coins, chainID string) (sdk.TxResp
 	}
 
 	txBldr := auth.NewTxBuilderFromCLI().
-		WithTxEncoder(utils.GetTxEncoder(cdc)).
+		WithTxEncoder(client.GetTxEncoder(cdc)).
 		WithChainID(chainID).
 		WithAccountNumber(accInfo.AccountNo).
 		WithSequence(accInfo.Sequence)

@@ -5,12 +5,13 @@
 package cli
 
 import (
-	"github.com/cosmos/cosmos-sdk/client"
+	"bufio"
 	"github.com/cosmos/cosmos-sdk/client/context"
+	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/x/auth"
-	"github.com/cosmos/cosmos-sdk/x/auth/client/utils"
+	"github.com/cosmos/cosmos-sdk/x/auth/client"
 	"github.com/e-money/em-ledger/x/issuer/types"
 	"github.com/spf13/cobra"
 )
@@ -25,7 +26,7 @@ func GetTxCmd(cdc *codec.Codec) *cobra.Command {
 	}
 
 	issuanceTxCmd.AddCommand(
-		client.PostCommands(
+		flags.PostCommands(
 			getCmdIncreaseMintableAmount(cdc),
 			getCmdDecreaseMintableAmount(cdc),
 			getCmdSetInflation(cdc),
@@ -43,7 +44,8 @@ func getCmdSetInflation(cdc *codec.Codec) *cobra.Command {
 		Short:   "Set the inflation rate for a denomination",
 		Args:    cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			txBldr := auth.NewTxBuilderFromCLI().WithTxEncoder(utils.GetTxEncoder(cdc))
+			inBuf := bufio.NewReader(cmd.InOrStdin())
+			txBldr := auth.NewTxBuilderFromCLI(inBuf).WithTxEncoder(client.GetTxEncoder(cdc))
 			cliCtx := context.NewCLIContextWithFrom(args[0]).WithCodec(cdc)
 
 			denom := args[1]
@@ -59,7 +61,7 @@ func getCmdSetInflation(cdc *codec.Codec) *cobra.Command {
 				Issuer:        cliCtx.GetFromAddress(),
 			}
 
-			return utils.GenerateOrBroadcastMsgs(cliCtx, txBldr, []sdk.Msg{msg})
+			return client.GenerateOrBroadcastMsgs(cliCtx, txBldr, []sdk.Msg{msg})
 		},
 	}
 }
@@ -70,7 +72,8 @@ func getCmdIncreaseMintableAmount(cdc *codec.Codec) *cobra.Command {
 		Short: "Increase the amount mintable for a liquidity provider.",
 		Args:  cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			txBldr := auth.NewTxBuilderFromCLI().WithTxEncoder(utils.GetTxEncoder(cdc))
+			inBuf := bufio.NewReader(cmd.InOrStdin())
+			txBldr := auth.NewTxBuilderFromCLI(inBuf).WithTxEncoder(client.GetTxEncoder(cdc))
 			cliCtx := context.NewCLIContextWithFrom(args[0]).WithCodec(cdc)
 
 			lpAcc, err := sdk.AccAddressFromBech32(args[1])
@@ -89,7 +92,7 @@ func getCmdIncreaseMintableAmount(cdc *codec.Codec) *cobra.Command {
 				Issuer:            cliCtx.GetFromAddress(),
 			}
 
-			return utils.GenerateOrBroadcastMsgs(cliCtx, txBldr, []sdk.Msg{msg})
+			return client.GenerateOrBroadcastMsgs(cliCtx, txBldr, []sdk.Msg{msg})
 		},
 	}
 }
@@ -100,7 +103,8 @@ func getCmdDecreaseMintableAmount(cdc *codec.Codec) *cobra.Command {
 		Short: "Decrease the amount mintable for a liquidity provider. Result cannot be negative",
 		Args:  cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			txBldr := auth.NewTxBuilderFromCLI().WithTxEncoder(utils.GetTxEncoder(cdc))
+			inBuf := bufio.NewReader(cmd.InOrStdin())
+			txBldr := auth.NewTxBuilderFromCLI(inBuf).WithTxEncoder(client.GetTxEncoder(cdc))
 			cliCtx := context.NewCLIContextWithFrom(args[0]).WithCodec(cdc)
 
 			lpAcc, err := sdk.AccAddressFromBech32(args[1])
@@ -119,7 +123,7 @@ func getCmdDecreaseMintableAmount(cdc *codec.Codec) *cobra.Command {
 				Issuer:            cliCtx.GetFromAddress(),
 			}
 
-			return utils.GenerateOrBroadcastMsgs(cliCtx, txBldr, []sdk.Msg{msg})
+			return client.GenerateOrBroadcastMsgs(cliCtx, txBldr, []sdk.Msg{msg})
 		},
 	}
 }
@@ -130,7 +134,8 @@ func getCmdRevokeLiquidityProvider(cdc *codec.Codec) *cobra.Command {
 		Short: "Revoke liquidity provider status for an account",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			txBldr := auth.NewTxBuilderFromCLI().WithTxEncoder(utils.GetTxEncoder(cdc))
+			inBuf := bufio.NewReader(cmd.InOrStdin())
+			txBldr := auth.NewTxBuilderFromCLI(inBuf).WithTxEncoder(client.GetTxEncoder(cdc))
 			cliCtx := context.NewCLIContextWithFrom(args[0]).WithCodec(cdc)
 
 			lpAcc, err := sdk.AccAddressFromBech32(args[1])
@@ -143,7 +148,7 @@ func getCmdRevokeLiquidityProvider(cdc *codec.Codec) *cobra.Command {
 				Issuer:            cliCtx.GetFromAddress(),
 			}
 
-			return utils.GenerateOrBroadcastMsgs(cliCtx, txBldr, []sdk.Msg{msg})
+			return client.GenerateOrBroadcastMsgs(cliCtx, txBldr, []sdk.Msg{msg})
 		},
 	}
 }
