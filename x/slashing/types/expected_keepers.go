@@ -6,13 +6,23 @@ package types // noalias
 
 import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/cosmos/cosmos-sdk/x/auth"
+	auth "github.com/cosmos/cosmos-sdk/x/auth/exported"
 	"github.com/cosmos/cosmos-sdk/x/staking/exported"
 )
 
 // AccountKeeper expected account keeper
 type AccountKeeper interface {
+	GetAccount(ctx sdk.Context, addr sdk.AccAddress) auth.Account
 	IterateAccounts(ctx sdk.Context, process func(auth.Account) (stop bool))
+}
+
+// BankKeeper defines the expected interface needed to retrieve account balances.
+type BankKeeper interface {
+	GetAllBalances(ctx sdk.Context, addr sdk.AccAddress) sdk.Coins
+	GetBalance(ctx sdk.Context, addr sdk.AccAddress, denom string) sdk.Coin
+	SetBalances(ctx sdk.Context, addr sdk.AccAddress, balances sdk.Coins) error
+	LockedCoins(ctx sdk.Context, addr sdk.AccAddress) sdk.Coins
+	SpendableCoins(ctx sdk.Context, addr sdk.AccAddress) sdk.Coins
 }
 
 // StakingKeeper expected staking keeper
@@ -35,7 +45,7 @@ type StakingKeeper interface {
 	Delegation(sdk.Context, sdk.AccAddress, sdk.ValAddress) exported.DelegationI
 
 	// MaxValidators returns the maximum amount of bonded validators
-	MaxValidators(sdk.Context) uint16
+	MaxValidators(sdk.Context) uint32
 }
 
 // StakingHooks event hooks for staking validator object
@@ -48,6 +58,6 @@ type StakingHooks interface {
 
 // SupplyKeeper defines the expected supply keeper
 type SupplyKeeper interface {
-	SendCoinsFromModuleToModule(ctx sdk.Context, senderModule, recipientModule string, amt sdk.Coins) sdk.Error
-	MintCoins(ctx sdk.Context, name string, amt sdk.Coins) sdk.Error
+	SendCoinsFromModuleToModule(ctx sdk.Context, senderModule, recipientModule string, amt sdk.Coins) error
+	MintCoins(ctx sdk.Context, name string, amt sdk.Coins) error
 }

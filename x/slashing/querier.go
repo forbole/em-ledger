@@ -5,7 +5,7 @@
 package slashing
 
 import (
-	"fmt"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 
@@ -16,7 +16,7 @@ import (
 
 // NewQuerier creates a new querier for slashing clients.
 func NewQuerier(k Keeper) sdk.Querier {
-	return func(ctx sdk.Context, path []string, req abci.RequestQuery) ([]byte, sdk.Error) {
+	return func(ctx sdk.Context, path []string, req abci.RequestQuery) ([]byte, error) {
 		switch path[0] {
 		case QueryParameters:
 			return queryParams(ctx, k)
@@ -25,49 +25,53 @@ func NewQuerier(k Keeper) sdk.Querier {
 		case QuerySigningInfos:
 			return querySigningInfos(ctx, req, k)
 		default:
-			return nil, sdk.ErrUnknownRequest("unknown staking query endpoint")
+			return nil, sdkerrors.Wrap(sdkerrors.ErrUnknownRequest, "unrecognized slashing query endpoint")
+			//return nil, sdk.ErrUnknownRequest("unknown staking query endpoint")
 		}
 	}
 }
 
-func queryParams(ctx sdk.Context, k Keeper) ([]byte, sdk.Error) {
+func queryParams(ctx sdk.Context, k Keeper) ([]byte, error) {
 	params := k.GetParams(ctx)
-
-	res, err := codec.MarshalJSONIndent(ModuleCdc, params)
-	if err != nil {
-		return nil, sdk.ErrInternal(sdk.AppendMsgToErr("failed to marshal JSON", err.Error()))
-	}
-
-	return res, nil
+	return codec.MarshalJSONIndent(ModuleCdc, params)
+	//if err != nil {
+	//	return nil, sdk.ErrInternal(sdk.AppendMsgToErr("failed to marshal JSON", err.Error()))
+	//}
+	//
+	//return res, nil
 }
 
-func querySigningInfo(ctx sdk.Context, req abci.RequestQuery, k Keeper) ([]byte, sdk.Error) {
+func querySigningInfo(ctx sdk.Context, req abci.RequestQuery, k Keeper) ([]byte, error) {
 	var params QuerySigningInfoParams
 
 	err := ModuleCdc.UnmarshalJSON(req.Data, &params)
 	if err != nil {
-		return nil, sdk.ErrInternal(fmt.Sprintf("failed to parse params: %s", err))
+		return nil, sdkerrors.Wrap(sdkerrors.ErrJSONUnmarshal, err.Error())
+		//return nil, sdk.ErrInternal(fmt.Sprintf("failed to parse params: %s", err))
 	}
 
 	signingInfo, found := k.getValidatorSigningInfo(ctx, params.ConsAddress)
 	if !found {
-		return nil, ErrNoSigningInfoFound(DefaultCodespace, params.ConsAddress)
+		return nil, sdkerrors.Wrap(ErrNoSigningInfoFound, params.ConsAddress.String())
+		//return nil, ErrNoSigningInfoFound(DefaultCodespace, params.ConsAddress)
 	}
 
 	res, err := codec.MarshalJSONIndent(ModuleCdc, signingInfo)
 	if err != nil {
-		return nil, sdk.ErrInternal(sdk.AppendMsgToErr("failed to JSON marshal result: %s", err.Error()))
+		return nil, sdkerrors.Wrap(sdkerrors.ErrJSONMarshal, err.Error())
+		//return nil, sdk.ErrInternal(sdk.AppendMsgToErr("failed to JSON marshal result: %s", err.Error()))
 	}
 
 	return res, nil
 }
 
-func querySigningInfos(ctx sdk.Context, req abci.RequestQuery, k Keeper) ([]byte, sdk.Error) {
+func querySigningInfos(ctx sdk.Context, req abci.RequestQuery, k Keeper) ([]byte, error) {
 	var params QuerySigningInfosParams
 
 	err := ModuleCdc.UnmarshalJSON(req.Data, &params)
 	if err != nil {
-		return nil, sdk.ErrInternal(fmt.Sprintf("failed to parse params: %s", err))
+		return nil, sdkerrors.Wrap(sdkerrors.ErrJSONUnmarshal, err.Error())
+		//return nil, sdk.ErrInternal(fmt.Sprintf("failed to parse params: %s", err))
 	}
 
 	var signingInfos []ValidatorSigningInfo
@@ -86,7 +90,8 @@ func querySigningInfos(ctx sdk.Context, req abci.RequestQuery, k Keeper) ([]byte
 
 	res, err := codec.MarshalJSONIndent(ModuleCdc, signingInfos)
 	if err != nil {
-		return nil, sdk.ErrInternal(sdk.AppendMsgToErr("failed to JSON marshal result: %s", err.Error()))
+		return nil, sdkerrors.Wrap(sdkerrors.ErrJSONMarshal, err.Error())
+		//return nil, sdk.ErrInternal(sdk.AppendMsgToErr("failed to JSON marshal result: %s", err.Error()))
 	}
 
 	return res, nil

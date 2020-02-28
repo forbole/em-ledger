@@ -7,10 +7,11 @@ package emoney
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/e-money/em-ledger/x/market"
+	"github.com/cosmos/cosmos-sdk/x/auth/keeper"
 	"os"
 	"path/filepath"
 
+	appcodec "github.com/e-money/em-ledger/app/codec"
 	emauth "github.com/e-money/em-ledger/hooks/auth"
 	embank "github.com/e-money/em-ledger/hooks/bank"
 	emdistr "github.com/e-money/em-ledger/hooks/distribution"
@@ -18,6 +19,7 @@ import (
 	"github.com/e-money/em-ledger/x/inflation"
 	"github.com/e-money/em-ledger/x/issuer"
 	"github.com/e-money/em-ledger/x/liquidityprovider"
+	"github.com/e-money/em-ledger/x/market"
 	"github.com/e-money/em-ledger/x/slashing"
 
 	"github.com/cosmos/cosmos-sdk/baseapp"
@@ -26,10 +28,11 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	"github.com/cosmos/cosmos-sdk/x/auth"
+	"github.com/cosmos/cosmos-sdk/x/auth/ante"
 	"github.com/cosmos/cosmos-sdk/x/bank"
 	distr "github.com/cosmos/cosmos-sdk/x/distribution"
-	"github.com/cosmos/cosmos-sdk/x/genaccounts"
 	"github.com/cosmos/cosmos-sdk/x/genutil"
+	"github.com/cosmos/cosmos-sdk/x/ibc"
 	"github.com/cosmos/cosmos-sdk/x/params"
 	"github.com/cosmos/cosmos-sdk/x/staking"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
@@ -50,7 +53,7 @@ var (
 	DefaultNodeHome = os.ExpandEnv("$HOME/.emd")
 
 	ModuleBasics = module.NewBasicManager(
-		genaccounts.AppModuleBasic{},
+		//genaccounts.AppModuleBasic{},
 		genutil.AppModuleBasic{},
 		auth.AppModuleBasic{},
 		bank.AppModuleBasic{},
@@ -85,6 +88,7 @@ type emoneyApp struct {
 	currentBatch db.Batch
 
 	accountKeeper   emauth.AccountKeeper
+	bankKeeper      bank.Keeper // TODO Wrapped?
 	paramsKeeper    params.Keeper
 	supplyKeeper    supply.Keeper
 	stakingKeeper   staking.Keeper
@@ -95,6 +99,7 @@ type emoneyApp struct {
 	issuerKeeper    issuer.Keeper
 	authorityKeeper authority.Keeper
 	marketKeeper    *market.Keeper
+	ibcKeeper       ibc.Keeper
 
 	mm *module.Manager
 }
@@ -103,13 +108,12 @@ type GenesisState map[string]json.RawMessage
 
 func NewApp(logger log.Logger, sdkdb db.DB, serverCtx *server.Context, baseAppOptions ...func(*baseapp.BaseApp)) *emoneyApp {
 	cdc := MakeCodec()
-	txDecoder := auth.DefaultTxDecoder(cdc)
+	appCodec := appcodec.NewAppCodec(cdc)
 
-	bApp := baseapp.NewBaseApp(appName, logger, sdkdb, txDecoder, baseAppOptions...)
+	bApp := baseapp.NewBaseApp(appName, logger, sdkdb, auth.DefaultTxDecoder(cdc), baseAppOptions...)
 
 	application := &emoneyApp{
 		BaseApp:  bApp,
-		cdc:      cdc,
 		database: createApplicationDatabase(serverCtx),
 	}
 
@@ -128,7 +132,7 @@ func NewApp(logger log.Logger, sdkdb db.DB, serverCtx *server.Context, baseAppOp
 		market.StoreKey,
 	)
 
-	application.paramsKeeper = params.NewKeeper(cdc, keys[params.StoreKey], tkeys[params.TStoreKey], params.DefaultCodespace)
+	application.paramsKeeper = params.NewKeeper(appCodec, keys[params.StoreKey], tkeys[params.TStoreKey])
 
 	var (
 		authSubspace     = application.paramsKeeper.Subspace(auth.DefaultParamspace)
@@ -139,36 +143,68 @@ func NewApp(logger log.Logger, sdkdb db.DB, serverCtx *server.Context, baseAppOp
 	)
 
 	accountBlacklist := application.ModuleAccountAddrs()
-	application.accountKeeper = emauth.Wrap(auth.NewAccountKeeper(cdc, keys[auth.StoreKey], authSubspace, auth.ProtoBaseAccount))
+	application.accountKeeper = emauth.Wrap(auth.NewAccountKeeper(appCodec, keys[auth.StoreKey], authSubspace, auth.ProtoBaseAccount))
 
-	bankKeeper := bank.NewBaseKeeper(application.accountKeeper, bankSubspace, bank.DefaultCodespace, accountBlacklist)
+	bankKeeper := bank.NewBaseKeeper(
+		appCodec, keys[bank.StoreKey], application.accountKeeper, bankSubspace, accountBlacklist,
+	)
 
-	application.supplyKeeper = supply.NewKeeper(cdc, keys[supply.StoreKey], application.accountKeeper, bankKeeper, maccPerms)
-	application.stakingKeeper = staking.NewKeeper(cdc, keys[staking.StoreKey], tkeys[staking.TStoreKey], application.supplyKeeper,
-		stakingSubspace, staking.DefaultCodespace)
-	application.distrKeeper = distr.NewKeeper(application.cdc, keys[distr.StoreKey], distrSubspace, &application.stakingKeeper,
-		application.supplyKeeper, distr.DefaultCodespace, auth.FeeCollectorName, accountBlacklist)
+	application.supplyKeeper = supply.NewKeeper(
+		appCodec, keys[supply.StoreKey], application.accountKeeper, bankKeeper, maccPerms,
+	)
 
-	application.inflationKeeper = inflation.NewKeeper(application.cdc, keys[inflation.StoreKey], application.supplyKeeper, auth.FeeCollectorName)
-	application.slashingKeeper = slashing.NewKeeper(application.cdc, keys[slashing.StoreKey], &application.stakingKeeper, application.supplyKeeper, auth.FeeCollectorName, slashingSubspace, slashing.DefaultCodespace, application.database)
-	application.stakingKeeper = *application.stakingKeeper.SetHooks(staking.NewMultiStakingHooks(application.distrKeeper.Hooks(), application.slashingKeeper.Hooks()))
-	application.lpKeeper = liquidityprovider.NewKeeper(application.accountKeeper, application.supplyKeeper)
-	application.issuerKeeper = issuer.NewKeeper(keys[issuer.StoreKey], application.lpKeeper, application.inflationKeeper)
-	application.authorityKeeper = authority.NewKeeper(keys[authority.StoreKey], application.issuerKeeper, application.supplyKeeper, application)
-	application.marketKeeper = market.NewKeeper(application.cdc, keys[market.StoreKey], application.accountKeeper, bankKeeper, application.supplyKeeper, application.authorityKeeper)
+	// TODO Should it receive a wrapped bankkeeper?
+	application.stakingKeeper = staking.NewKeeper(
+		appCodec, keys[staking.StoreKey], bankKeeper, application.supplyKeeper, stakingSubspace,
+	)
+
+	// TODO Should it receive a wrapped bankkeeper?
+	application.distrKeeper = distr.NewKeeper(
+		appCodec, keys[distr.StoreKey], distrSubspace, bankKeeper, &application.stakingKeeper, application.supplyKeeper, auth.FeeCollectorName, accountBlacklist,
+	)
+
+	application.inflationKeeper = inflation.NewKeeper(
+		application.cdc, keys[inflation.StoreKey], application.supplyKeeper, auth.FeeCollectorName,
+	)
+
+	application.slashingKeeper = slashing.NewKeeper(
+		cdc, keys[slashing.StoreKey], &application.stakingKeeper, application.supplyKeeper, auth.FeeCollectorName, slashingSubspace, application.database,
+	)
+
+	application.stakingKeeper = *application.stakingKeeper.SetHooks(
+		staking.NewMultiStakingHooks(application.distrKeeper.Hooks(), application.slashingKeeper.Hooks()),
+	)
+
+	application.lpKeeper = liquidityprovider.NewKeeper(
+		application.accountKeeper, bankKeeper, application.supplyKeeper,
+	)
+
+	application.issuerKeeper = issuer.NewKeeper(
+		keys[issuer.StoreKey], application.lpKeeper, application.inflationKeeper,
+	)
+	application.authorityKeeper = authority.NewKeeper(
+		keys[authority.StoreKey], application.issuerKeeper, application.supplyKeeper, application,
+	)
+
+	application.marketKeeper = market.NewKeeper(
+		application.cdc, keys[market.StoreKey], application.accountKeeper, bankKeeper, application.supplyKeeper, application.authorityKeeper,
+	)
+
+	application.ibcKeeper = ibc.NewKeeper(cdc, keys[ibc.StoreKey], application.stakingKeeper)
 
 	application.MountKVStores(keys)
 	application.MountTransientStores(tkeys)
 
+	bankKeeperWrapped := embank.Wrap(bankKeeper, application.authorityKeeper)
 	application.mm = module.NewManager(
-		genaccounts.NewAppModule(application.accountKeeper),
+		//genaccounts.NewAppModule(application.accountKeeper),
 		genutil.NewAppModule(application.accountKeeper, application.stakingKeeper, application.BaseApp.DeliverTx),
 		auth.NewAppModule(application.accountKeeper.InnerKeeper()),
-		bank.NewAppModule(embank.Wrap(bankKeeper, application.authorityKeeper), application.accountKeeper),
-		supply.NewAppModule(application.supplyKeeper, application.accountKeeper),
-		staking.NewAppModule(application.stakingKeeper, nil, application.accountKeeper, application.supplyKeeper),
+		bank.NewAppModule(bankKeeperWrapped, application.accountKeeper),
+		supply.NewAppModule(application.supplyKeeper, bankKeeperWrapped, application.accountKeeper),
+		staking.NewAppModule(application.stakingKeeper, application.accountKeeper, bankKeeper, application.supplyKeeper),
 		inflation.NewAppModule(application.inflationKeeper),
-		distr.NewAppModule(application.distrKeeper, application.supplyKeeper),
+		distr.NewAppModule(application.distrKeeper, application.accountKeeper, bankKeeper, application.supplyKeeper, application.stakingKeeper),
 		slashing.NewAppModule(application.slashingKeeper, application.stakingKeeper),
 		liquidityprovider.NewAppModule(application.lpKeeper),
 		issuer.NewAppModule(application.issuerKeeper),
@@ -179,7 +215,7 @@ func NewApp(logger log.Logger, sdkdb db.DB, serverCtx *server.Context, baseAppOp
 	// application.mm.SetOrderBeginBlockers() // NOTE Beginblockers are manually invoked in BeginBlocker func below
 	application.mm.SetOrderEndBlockers(staking.ModuleName)
 	application.mm.SetOrderInitGenesis(
-		genaccounts.ModuleName,
+		//genaccounts.ModuleName,
 		distr.ModuleName,
 		staking.ModuleName,
 		auth.ModuleName,
@@ -196,7 +232,13 @@ func NewApp(logger log.Logger, sdkdb db.DB, serverCtx *server.Context, baseAppOp
 	application.mm.RegisterRoutes(application.Router(), application.QueryRouter())
 
 	application.SetInitChainer(application.InitChainer)
-	application.SetAnteHandler(auth.NewAnteHandler(application.accountKeeper.InnerKeeper(), application.supplyKeeper, auth.DefaultSigVerificationGasConsumer))
+	// TODO Re-instate this when IBC should be enabled.
+	//application.SetAnteHandler(auth.NewAnteHandler(
+	//	application.accountKeeper.InnerKeeper(), application.supplyKeeper, application.ibcKeeper, auth.DefaultSigVerificationGasConsumer),
+	//)
+
+	application.SetAnteHandler(createAnteHandler(application.accountKeeper.InnerKeeper(), application.supplyKeeper))
+
 	application.SetBeginBlocker(application.BeginBlocker)
 	application.SetEndBlocker(application.EndBlocker)
 
@@ -230,7 +272,7 @@ func (app *emoneyApp) BeginBlocker(ctx sdk.Context, req abci.RequestBeginBlock) 
 	market.BeginBlocker(ctx, app.marketKeeper)
 	inflation.BeginBlocker(ctx, app.inflationKeeper)
 	slashing.BeginBlocker(ctx, req, app.slashingKeeper, app.currentBatch)
-	emdistr.BeginBlocker(ctx, req, app.distrKeeper, app.supplyKeeper, app.database, app.currentBatch)
+	emdistr.BeginBlocker(ctx, req, app.distrKeeper, app.supplyKeeper, app.bankKeeper, app.database, app.currentBatch)
 
 	return abci.ResponseBeginBlock{
 		Events: ctx.EventManager().ABCIEvents(),
@@ -263,7 +305,7 @@ func (app *emoneyApp) EndBlocker(ctx sdk.Context, req abci.RequestEndBlock) abci
 func (app *emoneyApp) InitChainer(ctx sdk.Context, req abci.RequestInitChain) (res abci.ResponseInitChain) {
 	var genesisState GenesisState
 	app.cdc.MustUnmarshalJSON(req.AppStateBytes, &genesisState)
-	return app.mm.InitGenesis(ctx, genesisState)
+	return app.mm.InitGenesis(ctx, app.cdc, genesisState)
 }
 
 func (app *emoneyApp) ModuleAccountAddrs() map[string]bool {
@@ -312,7 +354,6 @@ func distrDefaultGenesisState() func() distr.GenesisState {
 
 	return func() distr.GenesisState {
 		state := distrDefaultGenesisStateFn()
-		state.CommunityTax = sdk.NewDec(0)
 		return state
 	}
 }
@@ -339,4 +380,23 @@ func MakeCodec() *codec.Codec {
 	sdk.RegisterCodec(cdc)
 	codec.RegisterCrypto(cdc)
 	return cdc
+}
+
+// TODO Copied and adapted from x/auth/ante/ante.go. Use directly once IBC is integrated.
+func createAnteHandler(ak keeper.AccountKeeper, supplyKeeper supply.Keeper) sdk.AnteHandler {
+	return sdk.ChainAnteDecorators(
+		ante.NewSetUpContextDecorator(), // outermost AnteDecorator. SetUpContext must be called first
+		ante.NewMempoolFeeDecorator(),
+		ante.NewValidateBasicDecorator(),
+		ante.NewValidateMemoDecorator(ak),
+		ante.NewConsumeGasForTxSizeDecorator(ak),
+		ante.NewSetPubKeyDecorator(ak), // SetPubKeyDecorator must be called before all signature verification decorators
+		ante.NewValidateSigCountDecorator(ak),
+		ante.NewDeductFeeDecorator(ak, supplyKeeper),
+		ante.NewSigGasConsumeDecorator(ak, auth.DefaultSigVerificationGasConsumer),
+		ante.NewSigVerificationDecorator(ak),
+		ante.NewIncrementSequenceDecorator(ak),
+		//ibcante.NewProofVerificationDecorator(ibcKeeper.ClientKeeper, ibcKeeper.ChannelKeeper), // innermost AnteDecorator
+	)
+
 }

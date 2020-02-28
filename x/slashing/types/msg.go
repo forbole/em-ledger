@@ -6,6 +6,7 @@ package types
 
 import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 )
 
 // verify interface at compile time
@@ -36,9 +37,10 @@ func (msg MsgUnjail) GetSignBytes() []byte {
 }
 
 // quick validity check
-func (msg MsgUnjail) ValidateBasic() sdk.Error {
+func (msg MsgUnjail) ValidateBasic() error {
 	if msg.ValidatorAddr.Empty() {
-		return ErrBadValidatorAddr(DefaultCodespace)
+		return sdkerrors.Wrap(ErrBadValidatorAddr, "")
 	}
+
 	return nil
 }
