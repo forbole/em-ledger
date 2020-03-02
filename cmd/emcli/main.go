@@ -47,7 +47,7 @@ func main() {
 		Use:   "emcli",
 		Short: "Command line interface for interacting with e-money daemon",
 	}
-	rootCmd.PersistentFlags().String(client.FlagChainID, "", "Chain ID of tendermint node")
+	rootCmd.PersistentFlags().String(flags.FlagChainID, "", "Chain ID of tendermint node")
 
 	rootCmd.AddCommand(
 		rpc.StatusCommand(),
@@ -101,8 +101,8 @@ func registerTypesInAuthModule() {
 	lptypes.RegisterCodec(authcdc)
 	authtypes.RegisterCodec(authcdc)
 
-	authtypes.ModuleCdc = authcdc
-	auth.ModuleCdc = authcdc
+	authtypes.ModuleCdc = codec.NewHybridCodec(authcdc)
+	auth.ModuleCdc = codec.NewHybridCodec(authcdc)
 }
 
 func txCmds(cdc *amino.Codec) *cobra.Command {
