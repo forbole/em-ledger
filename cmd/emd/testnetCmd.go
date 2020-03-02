@@ -7,6 +7,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/cosmos/cosmos-sdk/x/bank"
 	"net"
 	"path/filepath"
 	"strings"
@@ -15,15 +16,15 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	appcodec "github.com/e-money/em-ledger/app/codec"
 	emtypes "github.com/e-money/em-ledger/types"
 	"github.com/e-money/em-ledger/x/authority"
 	"github.com/e-money/em-ledger/x/inflation"
 
-	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/server/config"
 	"github.com/cosmos/cosmos-sdk/x/auth"
+	authexported "github.com/cosmos/cosmos-sdk/x/auth/exported"
 	"github.com/cosmos/cosmos-sdk/x/auth/types"
-	"github.com/cosmos/cosmos-sdk/x/genaccounts"
 	"github.com/cosmos/cosmos-sdk/x/staking"
 
 	"github.com/cosmos/cosmos-sdk/client/keys"
@@ -111,7 +112,9 @@ func initializeTestnet(
 
 	config.Genesis = "genesis.json"
 
-	gen := mbm.DefaultGenesis()
+	appCodec := appcodec.NewAppCodec(cdc)
+
+	gen := mbm.DefaultGenesis(appCodec)
 	gen["authority"] = createAuthorityGenesis(authorityKey)
 	gen["inflation"] = createInflationGenesis()
 
@@ -132,7 +135,8 @@ func initializeTestnet(
 
 	nodeIDs := make([]string, validatorCount)
 	createValidatorTXs := make([]types.StdTx, validatorCount)
-	validatorAccounts := make([]genaccounts.GenesisAccount, validatorCount)
+	validatorAccounts := make([]authexported.GenesisAccount, validatorCount)
+	balances := make([]bank.Balance, validatorCount)
 
 	for i := 0; i < validatorCount; i++ {
 		nodeMoniker := fmt.Sprintf(nodeMonikerTemplate, i)
@@ -154,17 +158,26 @@ func initializeTestnet(
 
 		tx, validatorAccountAddress := createValidatorTransaction(i, pk, chainID)
 		createValidatorTXs[i] = tx
-		validatorAccounts[i] = createValidatorAccounts(validatorAccountAddress)
+
+		validatorAccounts[i] = auth.NewBaseAccount(sdk.AccAddress(validatorAccountAddress), nil, 0, 0)
+		accStakingTokens := sdk.TokensFromConsensusPower(100000)
+		balances[i] = bank.Balance{
+			Address: sdk.AccAddress(validatorAccountAddress),
+			Coins:   sdk.NewCoins(sdk.NewCoin("ungm", accStakingTokens)),
+		}
+
 	}
 
-	var genaccounts genaccounts.GenesisAccounts
+	var genaccounts authexported.GenesisAccounts
+	var genBalances []bank.Balance
 	if addRandomAccounts != "" {
-		genaccounts = addRandomTestAccounts(addRandomAccounts)
+		genaccounts, genBalances = addRandomTestAccounts(addRandomAccounts)
 	}
 
 	// Update genesis file with the created validators
 	allAccounts := append(validatorAccounts, genaccounts...)
-	addGenesisValidators(cdc, genDoc, createValidatorTXs, allAccounts)
+	allBalances := append(genBalances, balances...)
+	addGenesisValidators(appCodec, genDoc, createValidatorTXs, allAccounts, allBalances)
 
 	// Update consensus-parameters
 	genDoc.ConsensusParams = tmtypes.DefaultConsensusParams()
@@ -207,7 +220,7 @@ func createInflationGenesis() json.RawMessage {
 }
 
 func createAuthorityGenesis(akey sdk.AccAddress) json.RawMessage {
-	gen := authority.NewGenesisState(akey, emtypes.RestrictedDenoms{}, sdk.NewDecCoins(sdk.NewCoins()))
+	gen := authority.NewGenesisState(akey, emtypes.RestrictedDenoms{}, sdk.NewDecCoins())
 
 	bz, err := json.Marshal(gen)
 	if err != nil {
@@ -217,7 +230,7 @@ func createAuthorityGenesis(akey sdk.AccAddress) json.RawMessage {
 	return json.RawMessage(bz)
 }
 
-func addRandomTestAccounts(keystorepath string) genaccounts.GenesisAccounts {
+func addRandomTestAccounts(keystorepath string) (authexported.GenesisAccounts, []bank.Balance) {
 	kb, err := keys.NewKeyBaseFromDir(keystorepath)
 	if err != nil {
 		panic(err)
@@ -228,7 +241,9 @@ func addRandomTestAccounts(keystorepath string) genaccounts.GenesisAccounts {
 		panic(err)
 	}
 
-	result := make(genaccounts.GenesisAccounts, len(keys))
+	accounts := make([]authexported.GenesisAccount, len(keys))
+	balances := make([]bank.Balance, len(keys))
+
 	for i, k := range keys {
 		fmt.Printf("Creating genesis account for key %v.\n", k.GetName())
 		coins := sdk.NewCoins(
@@ -238,39 +253,48 @@ func addRandomTestAccounts(keystorepath string) genaccounts.GenesisAccounts {
 			sdk.NewCoin("echf", sdk.NewInt(10000000000)),
 		)
 
-		genAcc := genaccounts.NewGenesisAccountRaw(k.GetAddress(), coins, sdk.NewCoins(), 0, 0, "")
-		result[i] = genAcc
+		accounts[i] = auth.NewBaseAccount(k.GetAddress(), nil, 0, 0)
+		balances[i] = bank.Balance{Address: k.GetAddress(), Coins: coins}
 	}
 
-	return result
+	return accounts, balances
 }
 
-func createValidatorAccounts(address crypto.Address) genaccounts.GenesisAccount {
-	accStakingTokens := sdk.TokensFromConsensusPower(100000)
-	account := genaccounts.GenesisAccount{
-		Address: sdk.AccAddress(address),
-		Coins: sdk.Coins{
-			sdk.NewCoin("ungm", accStakingTokens),
-		},
-	}
-
-	return account
-}
-
-func addGenesisValidators(cdc *codec.Codec, genDoc *tmtypes.GenesisDoc, txs []types.StdTx, accounts []genaccounts.GenesisAccount) {
+func addGenesisValidators(cdc *appcodec.Codec, genDoc *tmtypes.GenesisDoc, txs []types.StdTx, accounts authexported.GenesisAccounts, balances []bank.Balance) {
 	var appState map[string]json.RawMessage
 	if err := cdc.UnmarshalJSON(genDoc.AppState, &appState); err != nil {
 		panic(err)
 	}
-	genutil.SetGenesisStateInAppState(cdc, appState, genutil.NewGenesisStateFromStdTx(txs))
-	genaccounts.SetGenesisStateInAppState(cdc, appState, accounts)
+	genutil.SetGenesisStateInAppState(cdc.Amino, appState, genutil.NewGenesisStateFromStdTx(txs))
+
+	authGenState := auth.GetGenesisStateFromAppState(cdc, appState)
+	bankGenState := bank.GetGenesisStateFromAppState(cdc.Amino, appState)
+
+	bankGenState.Balances = append(bankGenState.Balances, balances...)
+	bankGenState.Balances = bank.SanitizeGenesisBalances(bankGenState.Balances)
+
+	authGenState.Accounts = append(authGenState.Accounts, accounts...)
+	authGenState.Accounts = auth.SanitizeGenesisAccounts(authGenState.Accounts)
+
+	authGenStateBz, err := cdc.MarshalJSON(authGenState)
+	if err != nil {
+		panic(fmt.Errorf("failed to marshal auth genesis state: %w", err))
+	}
+
+	bankGenStateBz, err := cdc.MarshalJSON(bankGenState)
+	if err != nil {
+		panic(fmt.Errorf("failed to marshal bank genesis state: %w", err))
+	}
+
+	appState[auth.ModuleName] = authGenStateBz
+	appState[bank.ModuleName] = bankGenStateBz
 
 	genDoc.AppState = cdc.MustMarshalJSON(appState)
 }
 
 func createValidatorTransaction(i int, validatorpk crypto.PubKey, chainID string) (types.StdTx, crypto.Address) {
 	kb := keys.NewInMemoryKeyBase()
-	info, secret, err := kb.CreateMnemonic("nodename", ckeys.English, client.DefaultKeyPass, ckeys.Secp256k1)
+	info, secret, err := kb.CreateMnemonic("nodename", ckeys.English, "1234567890", ckeys.Secp256k1)
 	if err != nil {
 		panic(err)
 	}
@@ -281,7 +305,7 @@ func createValidatorTransaction(i int, validatorpk crypto.PubKey, chainID string
 		sdk.ValAddress(info.GetPubKey().Address()),
 		validatorpk,
 		sdk.NewCoin("ungm", valTokens),
-		staking.NewDescription(moniker, "", "", ""),
+		staking.NewDescription(moniker, "", "", "", ""),
 		staking.NewCommissionRates(sdk.NewDecWithPrec(15, 2), sdk.NewDecWithPrec(100, 2), sdk.NewDecWithPrec(100, 2)),
 		sdk.OneInt())
 
@@ -289,8 +313,10 @@ func createValidatorTransaction(i int, validatorpk crypto.PubKey, chainID string
 	fmt.Printf("Key mnemonic for %v : %v\n", moniker, secret)
 
 	tx := auth.NewStdTx([]sdk.Msg{msg}, auth.StdFee{}, []auth.StdSignature{}, " - ")
-	txBldr := auth.NewTxBuilderFromCLI().WithChainID(chainID).WithMemo(" - ").WithKeybase(kb)
-	signedTx, err := txBldr.SignStdTx("nodename", client.DefaultKeyPass, tx, false)
+
+	in := strings.NewReader("")
+	txBldr := auth.NewTxBuilderFromCLI(in).WithChainID(chainID).WithMemo(" - ").WithKeybase(kb)
+	signedTx, err := txBldr.SignStdTx("nodename", "1234567890", tx, false)
 
 	if err != nil {
 		panic(err)
@@ -365,7 +391,6 @@ func createConfigurationFiles(rootDir string) {
 	conf.ProfListenAddress = "localhost:6060"
 	conf.P2P.RecvRate = 5120000
 	conf.P2P.SendRate = 5120000
-	conf.TxIndex.IndexAllTags = true
 	conf.Consensus.TimeoutCommit = 2 * time.Second
 	conf.RPC.ListenAddress = "tcp://0.0.0.0:26657"
 

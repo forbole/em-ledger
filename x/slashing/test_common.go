@@ -26,6 +26,8 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/params"
 	"github.com/cosmos/cosmos-sdk/x/staking"
 	"github.com/cosmos/cosmos-sdk/x/supply"
+
+	appcodec "github.com/e-money/em-ledger/app/codec"
 )
 
 // TODO remove dependencies on staking (should only refer to validator set type from sdk)
@@ -58,6 +60,7 @@ func createTestCodec() *codec.Codec {
 
 func createTestInput(t *testing.T, defaults Params, database dbm.DB) (sdk.Context, bank.Keeper, staking.Keeper, params.Subspace, Keeper, supply.Keeper) {
 	keyAcc := sdk.NewKVStoreKey(auth.StoreKey)
+	keyBank := sdk.NewKVStoreKey(bank.StoreKey)
 	keyStaking := sdk.NewKVStoreKey(staking.StoreKey)
 	tkeyStaking := sdk.NewTransientStoreKey(staking.TStoreKey)
 	keySlashing := sdk.NewKVStoreKey(StoreKey)
@@ -77,10 +80,13 @@ func createTestInput(t *testing.T, defaults Params, database dbm.DB) (sdk.Contex
 	require.Nil(t, err)
 	ctx := sdk.NewContext(ms, abci.Header{Time: time.Unix(0, 0)}, false, log.NewNopLogger())
 	cdc := createTestCodec()
-	paramsKeeper := params.NewKeeper(cdc, keyParams, tkeyParams, params.DefaultCodespace)
-	accountKeeper := auth.NewAccountKeeper(cdc, keyAcc, paramsKeeper.Subspace(auth.DefaultParamspace), auth.ProtoBaseAccount)
 
-	bk := bank.NewBaseKeeper(accountKeeper, paramsKeeper.Subspace(bank.DefaultParamspace), bank.DefaultCodespace, make(map[string]bool))
+	appCodec := appcodec.NewAppCodec(cdc)
+
+	paramsKeeper := params.NewKeeper(appCodec, keyParams, tkeyParams)
+	accountKeeper := auth.NewAccountKeeper(appCodec, keyAcc, paramsKeeper.Subspace(auth.DefaultParamspace), auth.ProtoBaseAccount)
+
+	bk := bank.NewBaseKeeper(appCodec, keyBank, accountKeeper, paramsKeeper.Subspace(bank.DefaultParamspace), make(map[string]bool))
 	maccPerms := map[string][]string{
 		auth.FeeCollectorName:     nil,
 		staking.NotBondedPoolName: {supply.Burner, supply.Staking},
@@ -88,12 +94,12 @@ func createTestInput(t *testing.T, defaults Params, database dbm.DB) (sdk.Contex
 		ModuleName:                {supply.Minter},
 		PenaltyAccount:            nil,
 	}
-	supplyKeeper := supply.NewKeeper(cdc, keySupply, accountKeeper, bk, maccPerms)
+	supplyKeeper := supply.NewKeeper(appCodec, keySupply, accountKeeper, bk, maccPerms)
 
 	totalSupply := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, initTokens.MulRaw(int64(len(addrs)))))
 	supplyKeeper.SetSupply(ctx, supply.NewSupply(totalSupply))
 
-	sk := staking.NewKeeper(cdc, keyStaking, tkeyStaking, supplyKeeper, paramsKeeper.Subspace(staking.DefaultParamspace), staking.DefaultCodespace)
+	sk := staking.NewKeeper(appCodec, keyStaking, bk, supplyKeeper, paramsKeeper.Subspace(staking.DefaultParamspace))
 	genesis := staking.DefaultGenesisState()
 
 	// set module accounts
@@ -105,14 +111,14 @@ func createTestInput(t *testing.T, defaults Params, database dbm.DB) (sdk.Contex
 	supplyKeeper.SetModuleAccount(ctx, bondPool)
 	supplyKeeper.SetModuleAccount(ctx, notBondedPool)
 
-	_ = staking.InitGenesis(ctx, sk, accountKeeper, supplyKeeper, genesis)
+	_ = staking.InitGenesis(ctx, sk, accountKeeper, bk, supplyKeeper, genesis)
 
 	for _, addr := range addrs {
 		_, err = bk.AddCoins(ctx, sdk.AccAddress(addr), initCoins)
 	}
 	require.Nil(t, err)
 	paramstore := paramsKeeper.Subspace(DefaultParamspace)
-	keeper := NewKeeper(cdc, keySlashing, &sk, supplyKeeper, auth.FeeCollectorName, paramstore, DefaultCodespace, database)
+	keeper := NewKeeper(cdc, keyStaking, sk, supplyKeeper, auth.FeeCollectorName, paramstore, database)
 	sk.SetHooks(keeper.Hooks())
 
 	require.NotPanics(t, func() {

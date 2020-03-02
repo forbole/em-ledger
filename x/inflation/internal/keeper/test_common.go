@@ -25,6 +25,8 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/params"
 	"github.com/cosmos/cosmos-sdk/x/staking"
 	"github.com/cosmos/cosmos-sdk/x/supply"
+
+	appcodec "github.com/e-money/em-ledger/app/codec"
 	"github.com/e-money/em-ledger/x/inflation/internal/types"
 )
 
@@ -37,7 +39,10 @@ type testInput struct {
 func newTestInput(t *testing.T) testInput {
 	db := dbm.NewMemDB()
 
+	appCodec := appcodec.NewAppCodec(types.ModuleCdc)
+
 	keyAcc := sdk.NewKVStoreKey(auth.StoreKey)
+	keyBank := sdk.NewKVStoreKey(bank.StoreKey)
 	keySupply := sdk.NewKVStoreKey(supply.StoreKey)
 	keyStaking := sdk.NewKVStoreKey(staking.StoreKey)
 	keyParams := sdk.NewKVStoreKey(params.StoreKey)
@@ -56,16 +61,19 @@ func newTestInput(t *testing.T) testInput {
 
 	ctx := sdk.NewContext(ms, abci.Header{Time: time.Unix(0, 0)}, false, log.NewTMLogger(os.Stdout))
 
-	paramsKeeper := params.NewKeeper(types.ModuleCdc, keyParams, tkeyParams, params.DefaultCodespace)
-	accountKeeper := auth.NewAccountKeeper(types.ModuleCdc, keyAcc, paramsKeeper.Subspace(auth.DefaultParamspace), auth.ProtoBaseAccount)
-	bankKeeper := bank.NewBaseKeeper(accountKeeper, paramsKeeper.Subspace(bank.DefaultParamspace), bank.DefaultCodespace, make(map[string]bool))
+	paramsKeeper := params.NewKeeper(codec.NewHybridCodec(types.ModuleCdc), keyParams, tkeyParams)
+	accountKeeper := auth.NewAccountKeeper(appCodec, keyAcc, paramsKeeper.Subspace(auth.DefaultParamspace), auth.ProtoBaseAccount)
+	bankKeeper := bank.NewBaseKeeper(
+		appCodec, keyBank, accountKeeper, paramsKeeper.Subspace(bank.DefaultParamspace), make(map[string]bool),
+	)
+
 	maccPerms := map[string][]string{
 		auth.FeeCollectorName:     nil,
 		types.ModuleName:          {supply.Minter},
 		staking.NotBondedPoolName: {supply.Burner, supply.Staking},
 		staking.BondedPoolName:    {supply.Burner, supply.Staking},
 	}
-	supplyKeeper := supply.NewKeeper(types.ModuleCdc, keySupply, accountKeeper, bankKeeper, maccPerms)
+	supplyKeeper := supply.NewKeeper(appCodec, keySupply, accountKeeper, bankKeeper, maccPerms)
 	supplyKeeper.SetSupply(ctx, supply.NewSupply(sdk.Coins{}))
 
 	inflationKeeper := NewKeeper(types.ModuleCdc, keyInflation, supplyKeeper, auth.FeeCollectorName)
