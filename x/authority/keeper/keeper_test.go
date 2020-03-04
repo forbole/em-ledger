@@ -10,8 +10,10 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/bank"
 	"github.com/cosmos/cosmos-sdk/x/params"
 	"github.com/cosmos/cosmos-sdk/x/supply"
+	"strings"
 	"testing"
 
+	appcodec "github.com/e-money/em-ledger/app/codec"
 	apptypes "github.com/e-money/em-ledger/types"
 	"github.com/e-money/em-ledger/x/authority/types"
 	"github.com/e-money/em-ledger/x/issuer"
@@ -83,18 +85,18 @@ func TestCreateAndRevokeIssuer(t *testing.T) {
 
 	keeper.SetAuthority(ctx, accAuthority)
 
-	result := keeper.CreateIssuer(ctx, accAuthority, issuer1, []string{"eeur", "ejpy"})
-	require.True(t, result.IsOK())
+	_, err := keeper.CreateIssuer(ctx, accAuthority, issuer1, []string{"eeur", "ejpy"})
+	require.NoError(t, err)
 
-	result = keeper.CreateIssuer(ctx, accAuthority, issuer2, []string{"echf", "egbp", "eeur"})
-	require.False(t, result.IsOK()) // Must fail due to duplicate token denomination
+	_, err = keeper.CreateIssuer(ctx, accAuthority, issuer2, []string{"echf", "egbp", "eeur"})
+	require.Error(t, err) // Must fail due to duplicate token denomination
 
-	result = keeper.CreateIssuer(ctx, accAuthority, issuer2, []string{"echf", "egbp"})
-	require.True(t, result.IsOK())
+	_, err = keeper.CreateIssuer(ctx, accAuthority, issuer2, []string{"echf", "egbp"})
+	require.NoError(t, err)
 	require.Len(t, ik.GetIssuers(ctx), 2)
 
-	result = keeper.DestroyIssuer(ctx, accAuthority, issuer2)
-	require.True(t, result.IsOK())
+	_, err = keeper.DestroyIssuer(ctx, accAuthority, issuer2)
+	require.NoError(t, err)
 	require.Len(t, ik.GetIssuers(ctx), 1)
 
 	require.Panics(t, func() {
@@ -102,12 +104,12 @@ func TestCreateAndRevokeIssuer(t *testing.T) {
 		keeper.DestroyIssuer(ctx, issuer1, issuer2)
 	})
 
-	result = keeper.DestroyIssuer(ctx, accAuthority, issuer2)
-	require.False(t, result.IsOK())
+	_, err = keeper.DestroyIssuer(ctx, accAuthority, issuer2)
+	require.Error(t, err)
 	require.Len(t, ik.GetIssuers(ctx), 1)
 
-	result = keeper.DestroyIssuer(ctx, accAuthority, issuer1)
-	require.True(t, result.IsOK())
+	_, err = keeper.DestroyIssuer(ctx, accAuthority, issuer1)
+	require.NoError(t, err)
 	require.Empty(t, ik.GetIssuers(ctx))
 }
 
@@ -121,11 +123,11 @@ func TestAddMultipleDenomsSameIssuer(t *testing.T) {
 
 	keeper.SetAuthority(ctx, accAuthority)
 
-	result := keeper.CreateIssuer(ctx, accAuthority, accIssuer, []string{"eeur", "ejpy"})
-	require.True(t, result.IsOK())
+	_, err := keeper.CreateIssuer(ctx, accAuthority, accIssuer, []string{"eeur", "ejpy"})
+	require.NoError(t, err)
 
-	result = keeper.CreateIssuer(ctx, accAuthority, accIssuer, []string{"ekrw"})
-	require.True(t, result.IsOK())
+	_, err = keeper.CreateIssuer(ctx, accAuthority, accIssuer, []string{"ekrw"})
+	require.NoError(t, err)
 	issuers := ik.GetIssuers(ctx)
 
 	// Ensure that the denomination has been added to the existing issuer, not to a new entry with the same key
@@ -152,20 +154,20 @@ func TestManageGasPrices1(t *testing.T) {
 		keeper.SetGasPrices(ctx, accRandom, coins)
 	})
 
-	res := keeper.SetGasPrices(ctx, accAuthority, sdk.NewDecCoins(sdk.NewCoins()))
-	require.True(t, res.IsOK(), res.Log)
+	_, err := keeper.SetGasPrices(ctx, accAuthority, sdk.NewDecCoins())
+	require.NoError(t, err)
 
-	res = keeper.SetGasPrices(ctx, accAuthority, coins)
-	require.True(t, res.IsOK(), res.Log)
+	_, err = keeper.SetGasPrices(ctx, accAuthority, coins)
+	require.NoError(t, err)
 
 	gasPrices = keeper.GetGasPrices(ctx)
 	require.Equal(t, coins, gasPrices)
 
 	// Do not allow fees to be set in token denominations that are not present in the chain
 	coins, _ = sdk.ParseDecCoins("0.0005eeur,0.000001echf,0.0000001esek")
-	res = keeper.SetGasPrices(ctx, accAuthority, coins)
-	require.False(t, res.IsOK(), res.Log)
-	require.Equal(t, res.Code, types.CodeUnknownDenomination)
+	_, err = keeper.SetGasPrices(ctx, accAuthority, coins)
+	require.Error(t, err)
+	require.True(t, strings.HasPrefix(err.Error(), types.ErrUnknownDenom.Error()))
 }
 
 func TestManageGasPrices2(t *testing.T) {
@@ -198,11 +200,14 @@ func TestManageGasPrices2(t *testing.T) {
 func createTestComponents(t *testing.T) (sdk.Context, Keeper, issuer.Keeper, *mockGasPricesKeeper) {
 	cdc := makeTestCodec()
 
+	appCodec := appcodec.NewAppCodec(cdc)
+
 	logger := log.NewNopLogger() // Default
 	//logger = log.NewTMLogger(os.Stdout) // Override to see output
 
 	var (
 		keyAuthority = sdk.NewKVStoreKey(types.ModuleName)
+		keyBank      = sdk.NewKVStoreKey(bank.StoreKey)
 		keyAcc       = sdk.NewKVStoreKey(auth.StoreKey)
 		keyParams    = sdk.NewKVStoreKey(params.StoreKey)
 		keySupply    = sdk.NewKVStoreKey(supply.StoreKey)
@@ -213,6 +218,7 @@ func createTestComponents(t *testing.T) (sdk.Context, Keeper, issuer.Keeper, *mo
 	db := dbm.NewMemDB()
 	ms := store.NewCommitMultiStore(db)
 	ms.MountStoreWithDB(keyAuthority, sdk.StoreTypeIAVL, db)
+	ms.MountStoreWithDB(keyBank, sdk.StoreTypeIAVL, db)
 	ms.MountStoreWithDB(keyAcc, sdk.StoreTypeIAVL, db)
 	ms.MountStoreWithDB(keySupply, sdk.StoreTypeIAVL, db)
 	ms.MountStoreWithDB(keyParams, sdk.StoreTypeIAVL, db)
@@ -229,11 +235,11 @@ func createTestComponents(t *testing.T) (sdk.Context, Keeper, issuer.Keeper, *mo
 	}
 
 	var (
-		pk  = params.NewKeeper(cdc, keyParams, tkeyParams, params.DefaultCodespace)
-		ak  = auth.NewAccountKeeper(cdc, keyAcc, pk.Subspace(auth.DefaultParamspace), auth.ProtoBaseAccount)
-		bk  = bank.NewBaseKeeper(ak, pk.Subspace(bank.DefaultParamspace), bank.DefaultCodespace, make(map[string]bool))
-		sk  = supply.NewKeeper(cdc, keySupply, ak, bk, maccPerms)
-		lpk = liquidityprovider.NewKeeper(ak, sk)
+		pk  = params.NewKeeper(appCodec, keyParams, tkeyParams)
+		ak  = auth.NewAccountKeeper(appCodec, keyAcc, pk.Subspace(auth.DefaultParamspace), auth.ProtoBaseAccount)
+		bk  = bank.NewBaseKeeper(appCodec, keyBank, ak, pk.Subspace(bank.DefaultParamspace), make(map[string]bool))
+		sk  = supply.NewKeeper(appCodec, keySupply, ak, bk, maccPerms)
+		lpk = liquidityprovider.NewKeeper(ak, bk, sk)
 		ik  = issuer.NewKeeper(keySupply, lpk, mockInflationKeeper{})
 	)
 
@@ -265,11 +271,11 @@ func (m *mockGasPricesKeeper) SetMinimumGasPrices(gasPricesStr string) error {
 
 type mockInflationKeeper struct{}
 
-func (m mockInflationKeeper) SetInflation(ctx sdk.Context, inflation sdk.Dec, denom string) (_ sdk.Result) {
+func (m mockInflationKeeper) SetInflation(ctx sdk.Context, inflation sdk.Dec, denom string) (_ *sdk.Result, _ error) {
 	return
 }
 
-func (m mockInflationKeeper) AddDenoms(sdk.Context, []string) (_ sdk.Result) {
+func (m mockInflationKeeper) AddDenoms(sdk.Context, []string) (_ *sdk.Result) {
 	return
 }
 

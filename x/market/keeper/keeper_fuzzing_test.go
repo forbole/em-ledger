@@ -25,15 +25,15 @@ func TestFuzzing1(t *testing.T) {
 	fmt.Println("Using seed", seed)
 	r := rand.New(rand.NewSource(seed))
 
-	ctx, k, ak, _, _ := createTestComponents(t)
+	ctx, k, ak, bk, _ := createTestComponents(t)
 
 	var (
-		acc1 = createAccount(ctx, ak, "acc1", "1000000000eur")
-		acc2 = createAccount(ctx, ak, "acc2", "1000000000usd")
-		acc3 = createAccount(ctx, ak, "acc3", "1000000000chf")
+		acc1 = createAccount(ctx, ak, bk, "acc1acc1acc1acc1acc1acc1acc1acc1", "1000000000eur")
+		acc2 = createAccount(ctx, ak, bk, "acc2acc2acc2acc2acc2acc2acc2acc2", "1000000000usd")
+		acc3 = createAccount(ctx, ak, bk, "acc3acc3acc3acc3acc3acc3acc3acc3", "1000000000chf")
 	)
 
-	totalSupply := snapshotAccounts(ctx, ak)
+	totalSupply := snapshotAccounts(ctx, bk)
 
 	basepriceEURUSD := sdk.ZeroDec()
 	for basepriceEURUSD.IsZero() {
@@ -70,16 +70,16 @@ func TestFuzzing1(t *testing.T) {
 	})
 
 	for _, order := range allOrders {
-		res := k.NewOrderSingle(ctx, order)
+		_, err := k.NewOrderSingle(ctx, order)
 		if order.IsFilled() {
 			fmt.Println("Order is filled on creation. Ignoring.", order)
 			continue
 		}
-		require.True(t, res.IsOK())
+		require.NoError(t, err)
 	}
 
 	//dumpEvents(ctx.EventManager().Events())
-	require.True(t, totalSupply.Sub(snapshotAccounts(ctx, ak)).IsZero())
+	require.True(t, totalSupply.Sub(snapshotAccounts(ctx, bk)).IsZero())
 }
 
 func generateOrders(srcDenom, dstDenom string, basePrice sdk.Dec, seller exported.Account, r *rand.Rand) (res []types.Order) {

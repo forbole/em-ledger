@@ -14,8 +14,8 @@ func TestName(t *testing.T) {
 	ctx, k, _, _ := createTestComponents(t)
 
 	k.SetAuthority(ctx, authority)
-	res := k.SetGasPrices(ctx, authority, gp)
-	require.True(t, res.IsOK(), res.Log)
+	_, err := k.SetGasPrices(ctx, authority, gp)
+	require.NoError(t, err)
 
 	prices, err := queryGasPrices(ctx, k)
 	require.NoError(t, err)

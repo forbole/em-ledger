@@ -7,7 +7,9 @@ package bank
 import (
 	"fmt"
 	"github.com/cosmos/cosmos-sdk/x/auth/exported"
+	appcodec "github.com/e-money/em-ledger/app/codec"
 	"github.com/e-money/em-ledger/types"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -29,8 +31,8 @@ func TestProxySendCoins(t *testing.T) {
 	ctx, ak, bk := createTestComponents(t)
 
 	var (
-		acc1 = createAccount(ctx, ak, "acc1", "150000gbp, 150000usd, 150000sek")
-		acc2 = createAccount(ctx, ak, "acc2", "150000gbp, 150000usd, 150000sek")
+		acc1 = createAccount(ctx, ak, bk, "acc1", "150000gbp, 150000usd, 150000sek")
+		acc2 = createAccount(ctx, ak, bk, "acc2", "150000gbp, 150000usd, 150000sek")
 		dest = sdk.AccAddress([]byte("dest"))
 	)
 
@@ -60,8 +62,8 @@ func TestProxySendCoins(t *testing.T) {
 		if d.valid {
 			require.NoError(t, err)
 		} else {
-			require.Equal(t, Codespace, err.Codespace())
-			require.Equal(t, CodeRestrictedDenomination, err.Code())
+			require.Error(t, err)
+			require.True(t, strings.HasPrefix(err.Error(), ErrRestrictedDenominationUsed.Error()))
 		}
 	}
 }
@@ -70,9 +72,9 @@ func TestInputOutputCoins(t *testing.T) {
 	ctx, ak, bk := createTestComponents(t)
 
 	var (
-		acc1 = createAccount(ctx, ak, "acc1", "150000gbp, 150000usd, 150000sek")
-		acc2 = createAccount(ctx, ak, "acc2", "150000gbp, 150000usd, 150000sek")
-		acc3 = createAccount(ctx, ak, "acc3", "")
+		acc1 = createAccount(ctx, ak, bk, "acc1", "150000gbp, 150000usd, 150000sek")
+		acc2 = createAccount(ctx, ak, bk, "acc2", "150000gbp, 150000usd, 150000sek")
+		acc3 = createAccount(ctx, ak, bk, "acc3", "")
 	)
 
 	// For simplicity's sake, inputoutput will reject any transaction that includes restricted denominations.
@@ -126,17 +128,16 @@ func TestInputOutputCoins(t *testing.T) {
 		if d.valid {
 			require.NoError(t, err)
 		} else {
-			require.Equal(t, Codespace, err.Codespace())
-			require.Equal(t, CodeRestrictedDenomination, err.Code())
+			require.Error(t, err)
+			require.True(t, strings.HasPrefix(err.Error(), ErrRestrictedDenominationUsed.Error()))
 		}
 	}
-
-	fmt.Println(ak.GetAccount(ctx, acc3.GetAddress()).GetCoins())
 }
 
 func createTestComponents(t *testing.T) (sdk.Context, auth.AccountKeeper, ProxyKeeper) {
 	var (
 		authCapKey = sdk.NewKVStoreKey("authCapKey")
+		keyBank    = sdk.NewKVStoreKey(bank.StoreKey)
 		keyParams  = sdk.NewKVStoreKey("params")
 		tkeyParams = sdk.NewTransientStoreKey("transient_params")
 
@@ -144,21 +145,23 @@ func createTestComponents(t *testing.T) (sdk.Context, auth.AccountKeeper, ProxyK
 	)
 
 	cdc := createCodec()
+	appCodec := appcodec.NewAppCodec(cdc)
 
 	db := dbm.NewMemDB()
 	ms := store.NewCommitMultiStore(db)
 	ms.MountStoreWithDB(authCapKey, sdk.StoreTypeIAVL, db)
+	ms.MountStoreWithDB(keyBank, sdk.StoreTypeIAVL, db)
 
 	err := ms.LoadLatestVersion()
 	require.Nil(t, err)
 
-	pk := params.NewKeeper(cdc, keyParams, tkeyParams, params.DefaultCodespace)
+	pk := params.NewKeeper(appCodec, keyParams, tkeyParams)
 
 	ctx := sdk.NewContext(ms, abci.Header{ChainID: "test-chain"}, true, log.NewNopLogger())
-	accountKeeper := auth.NewAccountKeeper(cdc, authCapKey, pk.Subspace(auth.DefaultParamspace), auth.ProtoBaseAccount)
+	accountKeeper := auth.NewAccountKeeper(appCodec, authCapKey, pk.Subspace(auth.DefaultParamspace), auth.ProtoBaseAccount)
 	accountKeeperWrapped := emauth.Wrap(accountKeeper)
 
-	bankKeeper := bank.NewBaseKeeper(accountKeeperWrapped, pk.Subspace(bank.DefaultParamspace), bank.DefaultCodespace, blacklistedAddrs)
+	bankKeeper := bank.NewBaseKeeper(appCodec, keyBank, accountKeeperWrapped, pk.Subspace(bank.DefaultParamspace), blacklistedAddrs)
 
 	wrappedBK := Wrap(bankKeeper, restrictedKeeper{})
 
@@ -173,10 +176,13 @@ func (rk restrictedKeeper) GetRestrictedDenoms(sdk.Context) types.RestrictedDeno
 	return rk.RestrictedDenoms
 }
 
-func createAccount(ctx sdk.Context, ak auth.AccountKeeper, address, balance string) exported.Account {
+func createAccount(ctx sdk.Context, ak auth.AccountKeeper, bk bank.Keeper, address, balance string) exported.Account {
 	acc := ak.NewAccountWithAddress(ctx, sdk.AccAddress([]byte(address)))
-	acc.SetCoins(coins(balance))
+
+	//acc.SetCoins(coins(balance))
 	ak.SetAccount(ctx, acc)
+	bk.SetBalances(ctx, acc.GetAddress(), coins(balance))
+
 	return acc
 }
 

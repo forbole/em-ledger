@@ -23,16 +23,22 @@ type Codec struct {
 	Amino *codec.Codec
 }
 
-func (c *Codec) MarshalSupply(supply supplye.SupplyI) ([]byte, error) {
-	// TODO Fix me
-	return c.Amino.MarshalBinaryLengthPrefixed(supply)
+func (c *Codec) MarshalSupply(supplyI supplye.SupplyI) ([]byte, error) {
+	supply := &Supply{}
+	if err := supply.SetSupplyI(supplyI); err != nil {
+		return nil, err
+	}
+
+	return c.Marshaler.MarshalBinaryLengthPrefixed(supply)
 }
 
 func (c *Codec) UnmarshalSupply(bz []byte) (supplye.SupplyI, error) {
-	// TODO Fix me
-	var s supplye.SupplyI
-	err := c.Amino.UnmarshalBinaryLengthPrefixed(bz, s)
-	return s, err
+	supply := &Supply{}
+	if err := c.Marshaler.UnmarshalBinaryLengthPrefixed(bz, supply); err != nil {
+		return nil, err
+	}
+
+	return supply.GetSupplyI(), nil
 }
 
 func (c *Codec) MarshalSupplyJSON(supply supplye.SupplyI) ([]byte, error) {
@@ -45,15 +51,22 @@ func (c *Codec) UnmarshalSupplyJSON(bz []byte) (supplye.SupplyI, error) {
 	return s, err
 }
 
-func (c *Codec) MarshalAccount(acc exported.Account) ([]byte, error) {
-	// TODO Move away from Amino.
-	return c.Amino.MarshalBinaryLengthPrefixed(acc)
+func (c *Codec) MarshalAccount(accI exported.Account) ([]byte, error) {
+	acc := &Account{}
+	if err := acc.SetAccount(accI); err != nil {
+		return nil, err
+	}
+
+	return c.Marshaler.MarshalBinaryLengthPrefixed(acc)
 }
 
 func (c *Codec) UnmarshalAccount(bz []byte) (exported.Account, error) {
-	var acc exported.Account
-	err := c.Amino.UnmarshalBinaryLengthPrefixed(bz, acc)
-	return acc, err
+	acc := &Account{}
+	if err := c.Marshaler.UnmarshalBinaryLengthPrefixed(bz, acc); err != nil {
+		return nil, err
+	}
+
+	return acc.GetAccount(), nil
 }
 
 func (c *Codec) MarshalAccountJSON(acc exported.Account) ([]byte, error) {

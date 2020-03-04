@@ -70,7 +70,7 @@ run-single-node: clean
 	go run cmd/daemon/*.go start
 
 test:
-	go test ./...
+	go test -mod=readonly ./...
 
 bdd-test:
 	go test -v -p 1 --tags="bdd" bdd_test.go staking_test.go multisigauthority_test.go authority_test.go capacity_test.go market_test.go

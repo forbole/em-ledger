@@ -10,6 +10,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/auth"
 	"github.com/cosmos/cosmos-sdk/x/bank"
 
+	appcodec "github.com/e-money/em-ledger/app/codec"
 	"github.com/e-money/em-ledger/x/inflation/internal/keeper"
 	"github.com/e-money/em-ledger/x/inflation/internal/types"
 	"github.com/stretchr/testify/require"
@@ -91,9 +92,12 @@ func TestStartTimeInFuture(t *testing.T) {
 func createTestComponents() (sdk.Context, keeper.Keeper, supply.Keeper) {
 	cdc := createCDC()
 
+	appCodec := appcodec.NewAppCodec(cdc)
+
 	var (
 		keyInflation = sdk.NewKVStoreKey(ModuleName)
 		authCapKey   = sdk.NewKVStoreKey("authCapKey")
+		bankKey      = sdk.NewKVStoreKey(bank.StoreKey)
 		keyParams    = sdk.NewKVStoreKey("params")
 		supplyKey    = sdk.NewKVStoreKey("supply")
 		tkeyParams   = sdk.NewTransientStoreKey("transient_params")
@@ -105,6 +109,7 @@ func createTestComponents() (sdk.Context, keeper.Keeper, supply.Keeper) {
 	ms := store.NewCommitMultiStore(db)
 	ms.MountStoreWithDB(keyInflation, sdk.StoreTypeIAVL, db)
 	ms.MountStoreWithDB(authCapKey, sdk.StoreTypeIAVL, db)
+	ms.MountStoreWithDB(bankKey, sdk.StoreTypeIAVL, db)
 	ms.MountStoreWithDB(supplyKey, sdk.StoreTypeIAVL, db)
 
 	err := ms.LoadLatestVersion()
@@ -112,21 +117,21 @@ func createTestComponents() (sdk.Context, keeper.Keeper, supply.Keeper) {
 		panic(err)
 	}
 
-	pk := params.NewKeeper(cdc, keyParams, tkeyParams, params.DefaultCodespace)
+	pk := params.NewKeeper(appCodec, keyParams, tkeyParams)
 
 	ctx := sdk.NewContext(ms, abci.Header{ChainID: "test-chain"}, true, log.NewNopLogger())
-	accountKeeper := auth.NewAccountKeeper(cdc, authCapKey, pk.Subspace(auth.DefaultParamspace), auth.ProtoBaseAccount)
+	accountKeeper := auth.NewAccountKeeper(appCodec, authCapKey, pk.Subspace(auth.DefaultParamspace), auth.ProtoBaseAccount)
 
-	bankKeeper := bank.NewBaseKeeper(accountKeeper, pk.Subspace(bank.DefaultParamspace), bank.DefaultCodespace, blacklistedAddrs)
+	bankKeeper := bank.NewBaseKeeper(appCodec, bankKey, accountKeeper, pk.Subspace(bank.DefaultParamspace), blacklistedAddrs)
 
 	maccperms := map[string][]string{
 		ModuleName:            {supply.Minter},
 		auth.FeeCollectorName: nil,
 	}
 
-	supplyKeeper := supply.NewKeeper(cdc, supplyKey, accountKeeper, bankKeeper, maccperms)
+	supplyKeeper := supply.NewKeeper(appCodec, supplyKey, accountKeeper, bankKeeper, maccperms)
 
-	keeper := NewKeeper(cdc, keyInflation, supplyKeeper, auth.FeeCollectorName)
+	k := NewKeeper(cdc, keyInflation, supplyKeeper, auth.FeeCollectorName)
 
 	lastAppliedTime := time.Now().Add(-2400 * time.Hour)
 
@@ -135,9 +140,9 @@ func createTestComponents() (sdk.Context, keeper.Keeper, supply.Keeper) {
 		LastAppliedHeight: sdk.ZeroInt(),
 		InflationAssets:   nil,
 	}
-	keeper.SetState(ctx, state)
+	k.SetState(ctx, state)
 
-	return ctx, keeper, supplyKeeper
+	return ctx, k, supplyKeeper
 }
 
 func createCDC() *codec.Codec {

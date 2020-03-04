@@ -5,9 +5,11 @@ go 1.12
 require (
 	github.com/cosmos/cosmos-sdk v0.34.4-0.20200224190540-bb7e803cb929
 	github.com/emirpasic/gods v1.12.0
+	github.com/gogo/protobuf v1.3.1
 	github.com/gorilla/mux v1.7.4
 	github.com/onsi/ginkgo v1.7.0
 	github.com/onsi/gomega v1.4.3
+	github.com/regen-network/cosmos-proto v0.1.1-0.20200213154359-02baa11ea7c2
 	github.com/spf13/cobra v0.0.6
 	github.com/spf13/viper v1.6.2
 	github.com/stretchr/testify v1.5.1
