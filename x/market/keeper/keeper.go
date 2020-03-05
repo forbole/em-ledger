@@ -12,7 +12,6 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	authe "github.com/cosmos/cosmos-sdk/x/auth/exported"
 	"github.com/cosmos/cosmos-sdk/x/bank"
 
 	emtypes "github.com/e-money/em-ledger/types"
@@ -55,7 +54,7 @@ func NewKeeper(cdc *codec.Codec, key sdk.StoreKey, authKeeper types.AccountKeepe
 		authorityk: authorityKeeper,
 	}
 
-	authKeeper.AddAccountListener(k.accountChanged)
+	bankKeeper.AddBalanceListener(k.accountBalanceChanged)
 	return k
 }
 
@@ -401,13 +400,13 @@ func (k *Keeper) CancelOrder(ctx sdk.Context, owner sdk.AccAddress, clientOrderI
 }
 
 // Update any orders that can no longer be filled with the account's balance.
-func (k *Keeper) accountChanged(ctx sdk.Context, acc authe.Account) {
-	orders := k.accountOrders.GetAllOrders(acc.GetAddress())
+func (k *Keeper) accountBalanceChanged(ctx sdk.Context, acc sdk.AccAddress) {
+	orders := k.accountOrders.GetAllOrders(acc)
+	balance := k.bk.SpendableCoins(ctx, acc)
 
 	orders.Each(func(_ int, v interface{}) {
 		order := v.(*types.Order)
-		denomBalance := k.bk.SpendableCoins(ctx, acc.GetAddress()).AmountOf(order.Source.Denom)
-		//denomBalance := acc.SpendableCoins(ctx.BlockTime()).AmountOf(order.Source.Denom)
+		denomBalance := balance.AmountOf(order.Source.Denom)
 
 		order.SourceRemaining = order.Source.Amount.Sub(order.SourceFilled)
 		order.SourceRemaining = sdk.MinInt(order.SourceRemaining, denomBalance)

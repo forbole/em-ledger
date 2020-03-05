@@ -9,19 +9,22 @@ import (
 	auth "github.com/cosmos/cosmos-sdk/x/auth/exported"
 	"github.com/cosmos/cosmos-sdk/x/bank"
 	supply "github.com/cosmos/cosmos-sdk/x/supply/exported"
+	embank "github.com/e-money/em-ledger/hooks/bank"
 
 	"github.com/e-money/em-ledger/types"
 )
 
 type (
+	// TODO This could be unnecessary now. Remove.
 	AccountKeeper interface {
 		GetAccount(sdk.Context, sdk.AccAddress) auth.Account
-		AddAccountListener(func(sdk.Context, auth.Account))
 	}
 
 	BankKeeper interface {
 		InputOutputCoins(ctx sdk.Context, inputs []bank.Input, outputs []bank.Output) error
 		SpendableCoins(ctx sdk.Context, addr sdk.AccAddress) sdk.Coins
+
+		AddBalanceListener(l embank.BalanceListener)
 	}
 
 	SupplyKeeper interface {

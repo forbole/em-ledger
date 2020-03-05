@@ -14,8 +14,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	emauth "github.com/e-money/em-ledger/hooks/auth"
-
 	"github.com/cosmos/cosmos-sdk/codec"
 	"github.com/cosmos/cosmos-sdk/store"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -134,7 +132,92 @@ func TestInputOutputCoins(t *testing.T) {
 	}
 }
 
-func createTestComponents(t *testing.T) (sdk.Context, auth.AccountKeeper, ProxyKeeper) {
+func TestNotificationsOnBalanceChange(t *testing.T) {
+	ctx, ak, bk := createTestComponents(t)
+
+	var (
+		acc1 = createAccount(ctx, ak, bk, "acc1acc1acc1acc1acc1acc1acc1acc1", "150000gbp, 150000usd, 150000sek")
+		acc2 = createAccount(ctx, ak, bk, "acc2acc2acc2acc2acc2acc2acc2acc2", "150000gbp, 150000usd, 150000sek")
+		acc3 = createAccount(ctx, ak, bk, "acc3acc3acc3acc3acc3acc3acc3acc3", "")
+	)
+
+	invocationCount := 0
+	bk.AddBalanceListener(func(ctx sdk.Context, addr sdk.AccAddress) {
+		invocationCount++
+	})
+
+	// Go through every mutating function of the Proxy interface and ensure that the listener is invoked.
+
+	var testdata = []struct {
+		balanceChangeCount int
+		function           func()
+	}{
+		{1,
+			func() {
+				bk.SetBalance(ctx, acc3.GetAddress(), coin("70000eur"))
+			},
+		},
+		{
+			1,
+			func() {
+				bk.SetBalances(ctx, acc3.GetAddress(), coins("14000eur,9000usd"))
+			},
+		},
+		{
+			2,
+			func() {
+				bk.SendCoins(ctx, acc1.GetAddress(), acc3.GetAddress(), coins("90000gbp"))
+			},
+		},
+		{
+			3,
+			func() {
+				bk.InputOutputCoins(ctx,
+					[]bank.Input{
+						{acc1.GetAddress(), coins("100000sek")},
+						{acc2.GetAddress(), coins("100000sek")},
+					}, []bank.Output{
+						{acc3.GetAddress(), coins("200000sek")},
+					})
+			},
+		},
+		{
+			1,
+			func() {
+				bk.DelegateCoins(ctx, acc3.GetAddress(), acc1.GetAddress(), coins("50000sek"))
+			},
+		},
+		{
+			1,
+			func() {
+				bk.UndelegateCoins(ctx, acc1.GetAddress(), acc3.GetAddress(), coins("50000sek"))
+			},
+		},
+		{
+			1,
+			func() {
+				bk.SubtractCoins(ctx, acc2.GetAddress(), coins("90000usd"))
+			},
+		},
+		{
+			1,
+			func() {
+				bk.AddCoins(ctx, acc2.GetAddress(), coins("90000usd"))
+			},
+		},
+	}
+
+	expectedNotifications := 0
+	for _, data := range testdata {
+		data.function()
+		expectedNotifications += data.balanceChangeCount
+	}
+
+	require.Equal(t, expectedNotifications, invocationCount)
+	require.True(t, expectedNotifications > 3) // Test sanity check
+}
+
+func createTestComponents(t *testing.T) (sdk.Context, auth.AccountKeeper, *ProxyKeeper) {
 	var (
 		authCapKey = sdk.NewKVStoreKey("authCapKey")
 		keyBank    = sdk.NewKVStoreKey(bank.StoreKey)
@@ -159,9 +242,8 @@ func createTestComponents(t *testing.T) (sdk.Context, auth.AccountKeeper, ProxyK
 
 	ctx := sdk.NewContext(ms, abci.Header{ChainID: "test-chain"}, true, log.NewNopLogger())
 	accountKeeper := auth.NewAccountKeeper(appCodec, authCapKey, pk.Subspace(auth.DefaultParamspace), auth.ProtoBaseAccount)
-	accountKeeperWrapped := emauth.Wrap(accountKeeper)
 
-	bankKeeper := bank.NewBaseKeeper(appCodec, keyBank, accountKeeperWrapped, pk.Subspace(bank.DefaultParamspace), blacklistedAddrs)
+	bankKeeper := bank.NewBaseKeeper(appCodec, keyBank, accountKeeper, pk.Subspace(bank.DefaultParamspace), blacklistedAddrs)
 
 	wrappedBK := Wrap(bankKeeper, restrictedKeeper{})
 
@@ -184,6 +266,14 @@ func createAccount(ctx sdk.Context, ak auth.AccountKeeper, bk bank.Keeper, addre
 	bk.SetBalances(ctx, acc.GetAddress(), coins(balance))
 
 	return acc
+}
+
+func coin(s string) sdk.Coin {
+	coin, err := sdk.ParseCoin(s)
+	if err != nil {
+		panic(err)
+	}
+	return coin
 }
 
 func coins(s string) sdk.Coins {

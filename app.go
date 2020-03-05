@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 
 	appcodec "github.com/e-money/em-ledger/app/codec"
-	emauth "github.com/e-money/em-ledger/hooks/auth"
 	embank "github.com/e-money/em-ledger/hooks/bank"
 	emdistr "github.com/e-money/em-ledger/hooks/distribution"
 	"github.com/e-money/em-ledger/x/authority"
@@ -87,7 +86,7 @@ type emoneyApp struct {
 	database     db.DB
 	currentBatch db.Batch
 
-	accountKeeper   emauth.AccountKeeper
+	accountKeeper   auth.AccountKeeper
 	bankKeeper      bank.Keeper // TODO Wrapped?
 	paramsKeeper    params.Keeper
 	supplyKeeper    supply.Keeper
@@ -143,7 +142,7 @@ func NewApp(logger log.Logger, sdkdb db.DB, serverCtx *server.Context, baseAppOp
 	)
 
 	accountBlacklist := application.ModuleAccountAddrs()
-	application.accountKeeper = emauth.Wrap(auth.NewAccountKeeper(appCodec, keys[auth.StoreKey], authSubspace, auth.ProtoBaseAccount))
+	application.accountKeeper = auth.NewAccountKeeper(appCodec, keys[auth.StoreKey], authSubspace, auth.ProtoBaseAccount)
 
 	bankKeeper := bank.NewBaseKeeper(
 		appCodec, keys[bank.StoreKey], application.accountKeeper, bankSubspace, accountBlacklist,
@@ -186,8 +185,9 @@ func NewApp(logger log.Logger, sdkdb db.DB, serverCtx *server.Context, baseAppOp
 		keys[authority.StoreKey], application.issuerKeeper, application.supplyKeeper, application,
 	)
 
+	bankKeeperWrapped := embank.Wrap(bankKeeper, application.authorityKeeper)
 	application.marketKeeper = market.NewKeeper(
-		application.cdc, keys[market.StoreKey], application.accountKeeper, bankKeeper, application.supplyKeeper, application.authorityKeeper,
+		application.cdc, keys[market.StoreKey], application.accountKeeper, bankKeeperWrapped, application.supplyKeeper, application.authorityKeeper,
 	)
 
 	application.ibcKeeper = ibc.NewKeeper(cdc, keys[ibc.StoreKey], application.stakingKeeper)
@@ -195,16 +195,15 @@ func NewApp(logger log.Logger, sdkdb db.DB, serverCtx *server.Context, baseAppOp
 	application.MountKVStores(keys)
 	application.MountTransientStores(tkeys)
 
-	bankKeeperWrapped := embank.Wrap(bankKeeper, application.authorityKeeper)
 	application.mm = module.NewManager(
 		//genaccounts.NewAppModule(application.accountKeeper),
 		genutil.NewAppModule(application.accountKeeper, application.stakingKeeper, application.BaseApp.DeliverTx),
-		auth.NewAppModule(application.accountKeeper.InnerKeeper()),
+		auth.NewAppModule(application.accountKeeper),
 		bank.NewAppModule(bankKeeperWrapped, application.accountKeeper),
 		supply.NewAppModule(application.supplyKeeper, bankKeeperWrapped, application.accountKeeper),
-		staking.NewAppModule(application.stakingKeeper, application.accountKeeper, bankKeeper, application.supplyKeeper),
+		staking.NewAppModule(application.stakingKeeper, application.accountKeeper, bankKeeperWrapped, application.supplyKeeper),
 		inflation.NewAppModule(application.inflationKeeper),
-		distr.NewAppModule(application.distrKeeper, application.accountKeeper, bankKeeper, application.supplyKeeper, application.stakingKeeper),
+		distr.NewAppModule(application.distrKeeper, application.accountKeeper, bankKeeperWrapped, application.supplyKeeper, application.stakingKeeper),
 		slashing.NewAppModule(application.slashingKeeper, application.stakingKeeper),
 		liquidityprovider.NewAppModule(application.lpKeeper),
 		issuer.NewAppModule(application.issuerKeeper),
@@ -237,7 +236,7 @@ func NewApp(logger log.Logger, sdkdb db.DB, serverCtx *server.Context, baseAppOp
 	//	application.accountKeeper.InnerKeeper(), application.supplyKeeper, application.ibcKeeper, auth.DefaultSigVerificationGasConsumer),
 	//)
 
-	application.SetAnteHandler(createAnteHandler(application.accountKeeper.InnerKeeper(), application.supplyKeeper))
+	application.SetAnteHandler(createAnteHandler(application.accountKeeper, application.supplyKeeper))
 
 	application.SetBeginBlocker(application.BeginBlocker)
 	application.SetEndBlocker(application.EndBlocker)

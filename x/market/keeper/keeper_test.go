@@ -12,7 +12,7 @@ import (
 	"time"
 
 	appcodec "github.com/e-money/em-ledger/app/codec"
-	emauth "github.com/e-money/em-ledger/hooks/auth"
+	embank "github.com/e-money/em-ledger/hooks/bank"
 	emtypes "github.com/e-money/em-ledger/types"
 	"github.com/e-money/em-ledger/x/market/types"
 
@@ -316,7 +316,7 @@ func TestCancelOrders1(t *testing.T) {
 	acc := createAccount(ctx, ak, bk, "acc1acc1acc1acc1acc1acc1acc1acc1", "100eur")
 
 	_, err := k.CancelOrder(ctx, acc.GetAddress(), "abcde")
-	require.NoError(t, err)
+	require.Error(t, err)
 }
 
 func TestCancelReplaceOrder(t *testing.T) {
@@ -496,7 +496,7 @@ func TestVestingAccount(t *testing.T) {
 	ctx, keeper, ak, bk, _ := createTestComponents(t)
 	account := createAccount(ctx, ak, bk, "acc1acc1acc1acc1acc1acc1acc1acc1", "110000eur")
 
-	vestingAcc := vesting.NewBaseVestingAccount(account.(*auth.BaseAccount), coins("110000eur"), math.MaxInt64)
+	vestingAcc := vesting.NewDelayedVestingAccount(account.(*auth.BaseAccount), coins("110000eur"), math.MaxInt64)
 	ak.SetAccount(ctx, vestingAcc)
 
 	_, err := keeper.NewOrderSingle(ctx, order(vestingAcc, "5000eur", "4700chf"))
@@ -705,7 +705,7 @@ func TestSyntheticInstruments2(t *testing.T) {
 	require.Len(t, k.instruments, 0)
 
 	acc3usdbal := bk.GetBalance(ctx, acc3.GetAddress(), "usd")
-	require.Equal(t, "4000000", acc3usdbal.String())
+	require.Equal(t, "4000000", acc3usdbal.Amount.String())
 
 	// Ensure that all tokens are accounted for.
 	require.True(t, totalSupply.Sub(snapshotAccounts(ctx, bk)).IsZero())
@@ -768,7 +768,7 @@ func TestPreventPhantomLiquidity(t *testing.T) {
 	// Cannot sell more than the balance in the same instrument
 	order2 := order(acc1, "8000eur", "9000usd")
 	_, err = k.NewOrderSingle(ctx, order2)
-	require.NoError(t, err)
+	require.Error(t, err)
 
 	// Can sell the balance in another instrument
 	order3 := order(acc1, "8000eur", "6000chf")
@@ -804,18 +804,18 @@ func createTestComponents(t *testing.T) (sdk.Context, *Keeper, auth.AccountKeepe
 
 	ctx := sdk.NewContext(ms, abci.Header{ChainID: "test-chain"}, true, log.NewNopLogger())
 	accountKeeper := auth.NewAccountKeeper(appCodec, authCapKey, pk.Subspace(auth.DefaultParamspace), auth.ProtoBaseAccount)
-	accountKeeperWrapped := emauth.Wrap(accountKeeper)
 
-	bankKeeper := bank.NewBaseKeeper(appCodec, keyBank, accountKeeperWrapped, pk.Subspace(bank.DefaultParamspace), blacklistedAddrs)
+	bankKeeper := bank.NewBaseKeeper(appCodec, keyBank, accountKeeper, pk.Subspace(bank.DefaultParamspace), blacklistedAddrs)
 
 	maccPerms := map[string][]string{}
 
 	supplyKeeper := supply.NewKeeper(appCodec, supplyKey, accountKeeper, bankKeeper, maccPerms)
 	supplyKeeper.SetSupply(ctx, supply.NewSupply(coins("1eur,1usd,1chf,1jpy,1gbp")))
 
-	marketKeeper := NewKeeper(types.ModuleCdc, keyMarket, accountKeeperWrapped, bankKeeper, supplyKeeper, dummyAuthority{})
+	bankKeeperWrapped := embank.Wrap(bankKeeper, dummyAuthority{})
+	marketKeeper := NewKeeper(types.ModuleCdc, keyMarket, accountKeeper, bankKeeperWrapped, supplyKeeper, dummyAuthority{})
 
-	return ctx, marketKeeper, accountKeeper, bankKeeper, supplyKeeper
+	return ctx, marketKeeper, accountKeeper, bankKeeperWrapped, supplyKeeper
 }
 
 type dummyAuthority struct {
