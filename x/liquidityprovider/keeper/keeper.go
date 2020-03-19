@@ -46,7 +46,7 @@ func (k Keeper) CreateLiquidityProvider(ctx sdk.Context, address sdk.AccAddress,
 		return nil, sdkerrors.Wrap(sdkerrors.ErrInvalidAddress, address.String())
 	}
 
-	lpAcc := types.NewLiquidityProviderAccount(*baseAccount, mintable)
+	lpAcc := types.NewLiquidityProviderAccount(baseAccount, mintable)
 	k.authKeeper.SetAccount(ctx, lpAcc)
 
 	logger.Info("Created liquidity provider account.", "account", lpAcc.GetAddress())
@@ -79,6 +79,7 @@ func (k Keeper) BurnTokensFromBalance(ctx sdk.Context, liquidityProvider sdk.Acc
 	}
 
 	account = k.GetLiquidityProviderAccount(ctx, liquidityProvider)
+	// TODO Get protobuf to use the SDK.coins type automatically: https://github.com/gogo/protobuf/pull/658
 	account.Mintable = account.Mintable.Add(amount...)
 	k.SetLiquidityProviderAccount(ctx, account)
 
@@ -94,6 +95,7 @@ func (k Keeper) MintTokens(ctx sdk.Context, liquidityProvider sdk.AccAddress, am
 		//return sdk.ErrUnknownAddress(fmt.Sprintf("account %s is not a liquidity provider or does not exist", liquidityProvider.String())).Result()
 	}
 
+	// TODO https://github.com/gogo/protobuf/pull/658
 	updatedMintableAmount, anyNegative := account.Mintable.SafeSub(amount)
 	if anyNegative {
 		logger.Debug(fmt.Sprintf("Insufficient mintable amount for minting operation"), "requested", amount, "available", account.Mintable)
@@ -126,7 +128,7 @@ func (k Keeper) SetLiquidityProviderAccount(ctx sdk.Context, account *types.Liqu
 
 func (k Keeper) RevokeLiquidityProviderAccount(ctx sdk.Context, account exported.Account) bool {
 	if lpAcc, isLpAcc := account.(*types.LiquidityProviderAccount); isLpAcc {
-		account = &lpAcc.BaseAccount
+		account = lpAcc.BaseAccount
 		k.authKeeper.SetAccount(ctx, account)
 		return true
 	}

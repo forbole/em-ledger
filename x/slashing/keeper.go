@@ -45,13 +45,18 @@ const (
 
 // NewKeeper creates a slashing keeper
 func NewKeeper(cdc *codec.Codec, key sdk.StoreKey, sk types.StakingKeeper, supplyKeeper types.SupplyKeeper, feeModuleName string, paramspace params.Subspace, database db.DB) Keeper {
+	// set KeyTable if it has not already been set
+	if !paramspace.HasKeyTable() {
+		paramspace = paramspace.WithKeyTable(types.ParamKeyTable())
+	}
+
 	keeper := Keeper{
 		storeKey:      key,
 		cdc:           cdc,
 		sk:            sk,
 		supplyKeeper:  supplyKeeper,
 		feeModuleName: feeModuleName,
-		paramspace:    paramspace.WithKeyTable(ParamKeyTable()),
+		paramspace:    paramspace,
 		database:      database,
 	}
 	return keeper

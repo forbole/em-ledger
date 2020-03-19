@@ -119,9 +119,8 @@ func TestIssuerModifyLiquidityProvider(t *testing.T) {
 
 	// Decrease the mintable amount too much
 	mintable, _ = sdk.ParseCoins("400000eeur")
-	result, err := keeper.DecreaseMintableAmountOfLiquidityProvider(ctx, lpacc, issuer.Address, mintable)
-	require.NotNil(t, result)
-	require.NoError(t, err)
+	_, err := keeper.DecreaseMintableAmountOfLiquidityProvider(ctx, lpacc, issuer.Address, mintable)
+	require.Error(t, err)
 
 	// Verify unchanged mintable amount
 	a = ak.GetAccount(ctx, lpacc).(*liquidityprovider.Account)
@@ -154,7 +153,7 @@ func TestAddAndRevokeLiquidityProvider(t *testing.T) {
 
 	// Ensure that a random account can't create a LP
 	_, err := keeper.IncreaseMintableAmountOfLiquidityProvider(ctx, lpacc, randomacc, mintable)
-	require.NoError(t, err)
+	require.Error(t, err)
 
 	keeper.IncreaseMintableAmountOfLiquidityProvider(ctx, lpacc, iacc, mintable)
 	require.IsType(t, &liquidityprovider.Account{}, ak.GetAccount(ctx, lpacc))

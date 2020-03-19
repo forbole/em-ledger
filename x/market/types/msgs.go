@@ -120,12 +120,12 @@ func (m MsgAddOrder) ValidateBasic() error {
 	}
 
 	if !m.Destination.IsValid() {
-		return sdkerrors.Wrapf(sdkerrors.ErrInvalidCoins, "destination amount is invalid: ", m.Destination.String())
+		return sdkerrors.Wrapf(sdkerrors.ErrInvalidCoins, "destination amount is invalid: %v", m.Destination.String())
 		//return sdk.ErrInvalidCoins("destination amount is invalid: " + m.Destination.String())
 	}
 
 	if !m.Source.IsValid() {
-		return sdkerrors.Wrapf(sdkerrors.ErrInvalidCoins, "source amount is invalid: ", m.Source.String())
+		return sdkerrors.Wrapf(sdkerrors.ErrInvalidCoins, "source amount is invalid: %v", m.Source.String())
 		//return sdk.ErrInvalidCoins("source amount is invalid: " + m.Source.String())
 	}
 

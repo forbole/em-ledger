@@ -7,6 +7,7 @@ package slashing
 
 import (
 	"encoding/hex"
+	"github.com/e-money/em-ledger/x/slashing/types"
 	"testing"
 	"time"
 
@@ -58,7 +59,7 @@ func createTestCodec() *codec.Codec {
 	return cdc
 }
 
-func createTestInput(t *testing.T, defaults Params, database dbm.DB) (sdk.Context, bank.Keeper, staking.Keeper, params.Subspace, Keeper, supply.Keeper) {
+func createTestInput(t *testing.T, defaults Params, database dbm.DB) (sdk.Context, bank.Keeper, staking.Keeper, params.Subspace, Keeper, supply.Keeper, auth.AccountKeeper) {
 	keyAcc := sdk.NewKVStoreKey(auth.StoreKey)
 	keyBank := sdk.NewKVStoreKey(bank.StoreKey)
 	keyStaking := sdk.NewKVStoreKey(staking.StoreKey)
@@ -70,6 +71,7 @@ func createTestInput(t *testing.T, defaults Params, database dbm.DB) (sdk.Contex
 	db := dbm.NewMemDB()
 	ms := store.NewCommitMultiStore(db)
 	ms.MountStoreWithDB(keyAcc, sdk.StoreTypeIAVL, db)
+	ms.MountStoreWithDB(keyBank, sdk.StoreTypeIAVL, db)
 	ms.MountStoreWithDB(tkeyStaking, sdk.StoreTypeTransient, nil)
 	ms.MountStoreWithDB(keyStaking, sdk.StoreTypeIAVL, db)
 	ms.MountStoreWithDB(keySupply, sdk.StoreTypeIAVL, db)
@@ -101,6 +103,7 @@ func createTestInput(t *testing.T, defaults Params, database dbm.DB) (sdk.Contex
 
 	sk := staking.NewKeeper(appCodec, keyStaking, bk, supplyKeeper, paramsKeeper.Subspace(staking.DefaultParamspace))
 	genesis := staking.DefaultGenesisState()
+	sk.SetParams(ctx, staking.DefaultParams()j)
 
 	// set module accounts
 	feeCollectorAcc := supply.NewEmptyModuleAccount(auth.FeeCollectorName)
@@ -120,12 +123,13 @@ func createTestInput(t *testing.T, defaults Params, database dbm.DB) (sdk.Contex
 	paramstore := paramsKeeper.Subspace(DefaultParamspace)
 	keeper := NewKeeper(cdc, keyStaking, sk, supplyKeeper, auth.FeeCollectorName, paramstore, database)
 	sk.SetHooks(keeper.Hooks())
+	keeper.SetParams(ctx, types.DefaultParams())
 
 	require.NotPanics(t, func() {
 		InitGenesis(ctx, keeper, sk, GenesisState{defaults, nil, nil})
 	})
 
-	return ctx, bk, sk, paramstore, keeper, supplyKeeper
+	return ctx, bk, sk, paramstore, keeper, supplyKeeper, accountKeeper
 }
 
 func newPubKey(pk string) (res crypto.PubKey) {

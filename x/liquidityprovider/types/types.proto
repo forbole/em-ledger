@@ -1,0 +1,21 @@
+syntax = "proto3";
+package emoney.x.liquidityprovider.v1;
+
+import "third_party/proto/gogoproto/gogo.proto";
+import "third_party/proto/cosmos-sdk/types/types.proto";
+import "third_party/proto/cosmos-sdk/x/auth/types/types.proto";
+
+option go_package = "github.com/e-money/em-ledger/x/liquidityprovider/types";
+
+message LiquidityProviderAccount {
+    option (gogoproto.goproto_getters)  = false;
+    option (gogoproto.goproto_stringer) = false;
+
+    cosmos_sdk.x.auth.v1.BaseAccount base_account = 1
+        [(gogoproto.embed) = true, (gogoproto.moretags) = "yaml:\"base_account\""];
+
+    repeated cosmos_sdk.v1.Coin mintable = 2 [
+      (gogoproto.nullable)     = false,
+      (gogoproto.castrepeated) = "github.com/cosmos/cosmos-sdk/types.Coins"
+    ];
+}

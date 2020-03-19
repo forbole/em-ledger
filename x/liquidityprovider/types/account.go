@@ -13,13 +13,13 @@ import (
 
 var _ exported.Account = new(LiquidityProviderAccount)
 
-type LiquidityProviderAccount struct {
-	auth.BaseAccount
+//type LiquidityProviderAccount struct {
+//	auth.BaseAccount
+//
+//	Mintable sdk.Coins `json:"mintable" yaml:"mintable"`
+//}
 
-	Mintable sdk.Coins `json:"mintable" yaml:"mintable"`
-}
-
-func NewLiquidityProviderAccount(baseAccount auth.BaseAccount, mintable sdk.Coins) *LiquidityProviderAccount {
+func NewLiquidityProviderAccount(baseAccount *auth.BaseAccount, mintable sdk.Coins) *LiquidityProviderAccount {
 	return &LiquidityProviderAccount{
 		BaseAccount: baseAccount,
 		Mintable:    mintable,
@@ -27,12 +27,13 @@ func NewLiquidityProviderAccount(baseAccount auth.BaseAccount, mintable sdk.Coin
 }
 
 func (acc *LiquidityProviderAccount) IncreaseMintableAmount(increase sdk.Coins) {
+	// TODO Get protobuf to declare as Coins: https://github.com/gogo/protobuf/pull/658
 	acc.Mintable = acc.Mintable.Add(increase...)
 }
 
 // Function panics if resulting mintable amount is negative. Should be checked prior to invocation for cleaner handling.
 func (acc *LiquidityProviderAccount) DecreaseMintableAmount(decrease sdk.Coins) {
-	if mintable, anyNegative := acc.Mintable.SafeSub(decrease); !anyNegative {
+	if mintable, anyNegative := sdk.Coins(acc.Mintable).SafeSub(decrease); !anyNegative {
 		acc.Mintable = mintable
 		return
 	}

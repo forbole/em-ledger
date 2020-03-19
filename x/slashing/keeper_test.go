@@ -36,18 +36,20 @@ func keeperTestParams() types.Params {
 func TestHandleDoubleSign(t *testing.T) {
 	// initial setup
 	database := db.NewMemDB()
-	ctx, ck, sk, _, keeper, supplyKeeper := createTestInput(t, keeperTestParams(), database)
+	ctx, ck, sk, _, keeper, supplyKeeper, ak := createTestInput(t, keeperTestParams(), database)
 
 	// validator added pre-genesis
 	ctx = ctx.WithBlockHeight(-1)
 	power := int64(100)
 	amt := sdk.TokensFromConsensusPower(power)
 	operatorAddr, val := addrs[0], pks[0]
-	got := staking.NewHandler(sk)(ctx, NewTestMsgCreateValidator(operatorAddr, val, amt))
-	require.True(t, got.IsOK())
+
+	ak.SetAccount(ctx, ak.NewAccountWithAddress(ctx, sdk.AccAddress(operatorAddr)))
+	_, err := staking.NewHandler(sk)(ctx, NewTestMsgCreateValidator(operatorAddr, val, amt))
+	require.NoError(t, err)
 	staking.EndBlocker(ctx, sk)
 	require.Equal(
-		t, ck.GetCoins(ctx, sdk.AccAddress(operatorAddr)),
+		t, ck.GetAllBalances(ctx, sdk.AccAddress(operatorAddr)),
 		sdk.NewCoins(sdk.NewCoin(sk.GetParams(ctx).BondDenom, initTokens.Sub(amt))),
 	)
 	require.Equal(t, amt, sk.Validator(ctx, operatorAddr).GetBondedTokens())
@@ -60,7 +62,8 @@ func TestHandleDoubleSign(t *testing.T) {
 	// Keep track of token supplies before the slashing
 	preSlashSupply := supplyKeeper.GetSupply(ctx)
 	feeAccount := supplyKeeper.GetModuleAccount(ctx, auth.FeeCollectorName)
-	require.True(t, feeAccount.GetCoins().IsZero())
+	feeAccountBalance := ck.GetAllBalances(ctx, feeAccount.GetAddress())
+	require.True(t, feeAccountBalance.IsZero())
 
 	oldTokens := sk.Validator(ctx, operatorAddr).GetTokens()
 
@@ -90,12 +93,13 @@ func TestHandleDoubleSign(t *testing.T) {
 	// No tokens should have been burned, but rather sent to the penalty account for later distribution
 	require.Equal(t, preSlashSupply, supplyKeeper.GetSupply(ctx))
 	feeAccount = supplyKeeper.GetModuleAccount(ctx, PenaltyAccount)
-	require.Equal(t, sdk.NewInt(5000000), feeAccount.GetCoins().AmountOf(sk.BondDenom(ctx)))
+	feeAccountBalance = ck.GetAllBalances(ctx, feeAccount.GetAddress())
+	require.Equal(t, sdk.NewInt(5000000), feeAccountBalance.AmountOf(sk.BondDenom(ctx)))
 
 	// Still shouldn't be able to unjail
 	msgUnjail := types.NewMsgUnjail(operatorAddr)
-	res := handleMsgUnjail(ctx, msgUnjail, keeper)
-	require.False(t, res.IsOK())
+	_, err = handleMsgUnjail(ctx, msgUnjail, keeper)
+	require.Error(t, err)
 
 	// Should be able to unbond now
 	del, _ := sk.GetDelegation(ctx, sdk.AccAddress(operatorAddr), operatorAddr)
@@ -103,8 +107,8 @@ func TestHandleDoubleSign(t *testing.T) {
 
 	totalBond := validator.TokensFromShares(del.GetShares()).TruncateInt()
 	msgUnbond := staking.NewMsgUndelegate(sdk.AccAddress(operatorAddr), operatorAddr, sdk.NewCoin(sk.GetParams(ctx).BondDenom, totalBond))
-	res = staking.NewHandler(sk)(ctx, msgUnbond)
-	require.True(t, res.IsOK())
+	_, err = staking.NewHandler(sk)(ctx, msgUnbond)
+	require.NoError(t, err)
 }
 
 // ______________________________________________________________
@@ -114,18 +118,18 @@ func TestHandleDoubleSign(t *testing.T) {
 func TestPastMaxEvidenceAge(t *testing.T) {
 	// initial setup
 	database := db.NewMemDB()
-	ctx, ck, sk, _, keeper, _ := createTestInput(t, keeperTestParams(), database)
+	ctx, ck, sk, _, keeper, _, _ := createTestInput(t, keeperTestParams(), database)
 
 	// validator added pre-genesis
 	ctx = ctx.WithBlockHeight(-1)
 	power := int64(100)
 	amt := sdk.TokensFromConsensusPower(power)
 	operatorAddr, val := addrs[0], pks[0]
-	got := staking.NewHandler(sk)(ctx, NewTestMsgCreateValidator(operatorAddr, val, amt))
-	require.True(t, got.IsOK())
+	_, err := staking.NewHandler(sk)(ctx, NewTestMsgCreateValidator(operatorAddr, val, amt))
+	require.NoError(t, err)
 	staking.EndBlocker(ctx, sk)
 	require.Equal(
-		t, ck.GetCoins(ctx, sdk.AccAddress(operatorAddr)),
+		t, ck.GetAllBalances(ctx, sdk.AccAddress(operatorAddr)),
 		sdk.NewCoins(sdk.NewCoin(sk.GetParams(ctx).BondDenom, initTokens.Sub(amt))),
 	)
 	require.Equal(t, amt, sk.Validator(ctx, operatorAddr).GetBondedTokens())
@@ -156,19 +160,19 @@ func TestPastMaxEvidenceAge(t *testing.T) {
 func TestHandleAbsentValidator(t *testing.T) {
 	// initial setup
 	database := db.NewMemDB()
-	ctx, ck, sk, _, keeper, _ := createTestInput(t, keeperTestParams(), database)
+	ctx, ck, sk, _, keeper, _, _ := createTestInput(t, keeperTestParams(), database)
 
 	power := int64(100)
 	amt := sdk.TokensFromConsensusPower(power)
 	addr, val := addrs[0], pks[0]
 	sh := staking.NewHandler(sk)
 	slh := NewHandler(keeper)
-	got := sh(ctx, NewTestMsgCreateValidator(addr, val, amt))
-	require.True(t, got.IsOK())
+	_, err := sh(ctx, NewTestMsgCreateValidator(addr, val, amt))
+	require.NoError(t, err)
 	staking.EndBlocker(ctx, sk)
 
 	require.Equal(
-		t, ck.GetCoins(ctx, sdk.AccAddress(addr)),
+		t, ck.GetAllBalances(ctx, sdk.AccAddress(addr)),
 		sdk.NewCoins(sdk.NewCoin(sk.GetParams(ctx).BondDenom, initTokens.Sub(amt))),
 	)
 	require.Equal(t, amt, sk.Validator(ctx, addr).GetBondedTokens())
@@ -212,7 +216,8 @@ func TestHandleAbsentValidator(t *testing.T) {
 	validator, _ := sk.GetValidatorByConsAddr(ctx, sdk.GetConsAddress(val))
 	require.Equal(t, sdk.Bonded, validator.GetStatus())
 	bondPool := sk.GetBondedPool(ctx)
-	require.True(sdk.IntEq(t, amt, bondPool.GetCoins().AmountOf(sk.BondDenom(ctx))))
+	bondPoolBalance := ck.GetAllBalances(ctx, bondPool.GetAddress())
+	require.True(sdk.IntEq(t, amt, bondPoolBalance.AmountOf(sk.BondDenom(ctx))))
 
 	// 501st block missed
 	ctx = ctx.WithBlockHeight(height).WithBlockTime(nextBlocktime(1))
@@ -254,15 +259,15 @@ func TestHandleAbsentValidator(t *testing.T) {
 	require.True(t, validator.Jailed)
 
 	// unrevocation should fail prior to jail expiration
-	got = slh(ctx, NewMsgUnjail(addr))
-	require.False(t, got.IsOK())
+	_, err = slh(ctx, NewMsgUnjail(addr))
+	require.NoError(t, err)
 
 	// unrevocation should succeed after jail expiration
 	height++
 	ctx = ctx.WithBlockHeight(height).WithBlockTime(nextBlocktime(5))
 
-	got = slh(ctx, NewMsgUnjail(addr))
-	require.True(t, got.IsOK())
+	_, err = slh(ctx, NewMsgUnjail(addr))
+	require.NoError(t, err)
 
 	// end block
 	staking.EndBlocker(ctx, sk)
@@ -273,7 +278,8 @@ func TestHandleAbsentValidator(t *testing.T) {
 
 	// validator should have been slashed
 	bondPool = sk.GetBondedPool(ctx)
-	require.Equal(t, amt.Int64()-slashAmt, bondPool.GetCoins().AmountOf(sk.BondDenom(ctx)).Int64())
+	bondPoolBalance = ck.GetAllBalances(ctx, bondPool.GetAddress())
+	require.Equal(t, amt.Int64()-slashAmt, bondPoolBalance.AmountOf(sk.BondDenom(ctx)).Int64())
 
 	// Validator start height should not have been changed
 	info, found = keeper.getValidatorSigningInfo(ctx, sdk.ConsAddress(val.Address()))
@@ -324,7 +330,7 @@ func TestHandleNewValidator(t *testing.T) {
 	database := db.NewMemDB()
 
 	// initial setup
-	ctx, ck, sk, _, keeper, _ := createTestInput(t, keeperTestParams(), database)
+	ctx, ck, sk, _, keeper, _, _ := createTestInput(t, keeperTestParams(), database)
 	addr, val := addrs[0], pks[0]
 	amt := sdk.TokensFromConsensusPower(100)
 	sh := staking.NewHandler(sk)
@@ -333,12 +339,12 @@ func TestHandleNewValidator(t *testing.T) {
 	ctx = ctx.WithBlockHeight(1001).WithBlockTime(nextBlocktime(1001))
 
 	// Validator created
-	got := sh(ctx, NewTestMsgCreateValidator(addr, val, amt))
-	require.True(t, got.IsOK())
+	_, err := sh(ctx, NewTestMsgCreateValidator(addr, val, amt))
+	require.NoError(t, err)
 	staking.EndBlocker(ctx, sk)
 
 	require.Equal(
-		t, ck.GetCoins(ctx, sdk.AccAddress(addr)),
+		t, ck.GetAllBalances(ctx, sdk.AccAddress(addr)),
 		sdk.NewCoins(sdk.NewCoin(sk.GetParams(ctx).BondDenom, initTokens.Sub(amt))),
 	)
 	require.Equal(t, amt, sk.Validator(ctx, addr).GetBondedTokens())
@@ -363,8 +369,10 @@ func TestHandleNewValidator(t *testing.T) {
 	validator, _ := sk.GetValidatorByConsAddr(ctx, sdk.GetConsAddress(val))
 	require.Equal(t, sdk.Bonded, validator.GetStatus())
 	bondPool := sk.GetBondedPool(ctx)
+	bondPoolBalance := ck.GetAllBalances(ctx, bondPool.GetAddress())
+
 	expTokens := sdk.TokensFromConsensusPower(100)
-	require.Equal(t, expTokens.Int64(), bondPool.GetCoins().AmountOf(sk.BondDenom(ctx)).Int64())
+	require.Equal(t, expTokens.Int64(), bondPoolBalance.AmountOf(sk.BondDenom(ctx)).Int64())
 }
 
 // Test a jailed validator being "down" twice
@@ -374,13 +382,13 @@ func TestHandleAlreadyJailed(t *testing.T) {
 	database := db.NewMemDB()
 
 	// initial setup
-	ctx, _, sk, _, keeper, supplyKeeper := createTestInput(t, DefaultParams(), database)
+	ctx, _, sk, _, keeper, supplyKeeper, _ := createTestInput(t, DefaultParams(), database)
 	power := int64(100)
 	amt := sdk.TokensFromConsensusPower(power)
 	addr, val := addrs[0], pks[0]
 	sh := staking.NewHandler(sk)
-	got := sh(ctx, NewTestMsgCreateValidator(addr, val, amt))
-	require.True(t, got.IsOK())
+	_, err := sh(ctx, NewTestMsgCreateValidator(addr, val, amt))
+	require.NoError(t, err)
 	staking.EndBlocker(ctx, sk)
 
 	preSlashingSupply := supplyKeeper.GetSupply(ctx)
@@ -434,7 +442,7 @@ func TestValidatorDippingInAndOut(t *testing.T) {
 
 	// initial setup
 	// keeperTestParams set the SignedBlocksWindow to 1000 and MaxMissedBlocksPerWindow to 500
-	ctx, _, sk, _, keeper, _ := createTestInput(t, keeperTestParams(), database)
+	ctx, _, sk, _, keeper, _, _ := createTestInput(t, keeperTestParams(), database)
 	params := sk.GetParams(ctx)
 	params.MaxValidators = 1
 	sk.SetParams(ctx, params)
@@ -443,8 +451,8 @@ func TestValidatorDippingInAndOut(t *testing.T) {
 	addr, val := addrs[0], pks[0]
 	consAddr := sdk.ConsAddress(addr)
 	sh := staking.NewHandler(sk)
-	got := sh(ctx, NewTestMsgCreateValidator(addr, val, amt))
-	require.True(t, got.IsOK())
+	_, err := sh(ctx, NewTestMsgCreateValidator(addr, val, amt))
+	require.NoError(t, err)
 	staking.EndBlocker(ctx, sk)
 
 	// 100 first blocks OK
@@ -458,8 +466,8 @@ func TestValidatorDippingInAndOut(t *testing.T) {
 
 	// kick first validator out of validator set
 	newAmt := sdk.TokensFromConsensusPower(101)
-	got = sh(ctx, NewTestMsgCreateValidator(addrs[1], pks[1], newAmt))
-	require.True(t, got.IsOK())
+	_, err = sh(ctx, NewTestMsgCreateValidator(addrs[1], pks[1], newAmt))
+	require.NoError(t, err)
 	validatorUpdates := staking.EndBlocker(ctx, sk)
 	require.Equal(t, 2, len(validatorUpdates))
 	validator, _ := sk.GetValidator(ctx, addr)
@@ -472,8 +480,8 @@ func TestValidatorDippingInAndOut(t *testing.T) {
 
 	// validator added back in
 	delTokens := sdk.TokensFromConsensusPower(50)
-	got = sh(ctx, newTestMsgDelegate(sdk.AccAddress(addrs[2]), addrs[0], delTokens))
-	require.True(t, got.IsOK())
+	_, err = sh(ctx, newTestMsgDelegate(sdk.AccAddress(addrs[2]), addrs[0], delTokens))
+	require.NoError(t, err)
 	validatorUpdates = staking.EndBlocker(ctx, sk)
 	require.Equal(t, 2, len(validatorUpdates))
 	validator, _ = sk.GetValidator(ctx, addr)

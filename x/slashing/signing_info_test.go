@@ -14,7 +14,7 @@ import (
 )
 
 func TestGetSetValidatorSigningInfo(t *testing.T) {
-	ctx, _, _, _, keeper, _ := createTestInput(t, DefaultParams(), db.NewMemDB())
+	ctx, _, _, _, keeper, _, _ := createTestInput(t, DefaultParams(), db.NewMemDB())
 	info, found := keeper.getValidatorSigningInfo(ctx, sdk.ConsAddress(addrs[0]))
 	require.False(t, found)
 	newInfo := NewValidatorSigningInfo(
@@ -33,7 +33,7 @@ func TestGetSetValidatorSigningInfo(t *testing.T) {
 
 func TestGetSetValidatorMissedBlockBitArray(t *testing.T) {
 	database := db.NewMemDB()
-	_, _, _, _, keeper, _ := createTestInput(t, DefaultParams(), database)
+	_, _, _, _, keeper, _, _ := createTestInput(t, DefaultParams(), database)
 
 	missed := keeper.getValidatorMissedBlockBitArray(sdk.ConsAddress(addrs[0]), 0)
 	require.False(t, missed) // treat empty key as not missed

@@ -18,25 +18,30 @@ import (
 
 func TestBeginBlocker(t *testing.T) {
 	database := db.NewMemDB()
-	ctx, ck, sk, _, keeper, supplyKeeper := createTestInput(t, DefaultParams(), database)
+	ctx, ck, sk, _, keeper, supplyKeeper, ak := createTestInput(t, DefaultParams(), database)
 	power := int64(100)
 	amt := sdk.TokensFromConsensusPower(power)
 	addr1, pk1 := addrs[2], pks[2]
 	addr2, pk2 := addrs[1], pks[1]
 
+	// Ensure accounts exist
+	ak.SetAccount(ctx, ak.NewAccountWithAddress(ctx, sdk.AccAddress(addr1)))
+	ak.SetAccount(ctx, ak.NewAccountWithAddress(ctx, sdk.AccAddress(addr2)))
+
 	// Verify that the penalty account is available and empty
-	penalties := supplyKeeper.GetModuleAccount(ctx, PenaltyAccount).GetCoins()
-	require.True(t, penalties.IsZero())
+	penaltiesAccount := supplyKeeper.GetModuleAccount(ctx, PenaltyAccount)
+	penaltiesAccountBalance := ck.GetAllBalances(ctx, penaltiesAccount.GetAddress())
+	require.True(t, penaltiesAccountBalance.IsZero())
 
 	// bond the validators
-	got := staking.NewHandler(sk)(ctx, NewTestMsgCreateValidator(addr1, pk1, amt))
-	require.True(t, got.IsOK())
-	got = staking.NewHandler(sk)(ctx, NewTestMsgCreateValidator(addr2, pk2, amt))
-	require.True(t, got.IsOK())
+	_, err := staking.NewHandler(sk)(ctx, NewTestMsgCreateValidator(addr1, pk1, amt))
+	require.NoError(t, err)
+	_, err = staking.NewHandler(sk)(ctx, NewTestMsgCreateValidator(addr2, pk2, amt))
+	require.NoError(t, err)
 
 	staking.EndBlocker(ctx, sk)
 	require.Equal(
-		t, ck.GetCoins(ctx, sdk.AccAddress(addr1)),
+		t, ck.GetAllBalances(ctx, sdk.AccAddress(addr1)),
 		sdk.NewCoins(sdk.NewCoin(sk.GetParams(ctx).BondDenom, initTokens.Sub(amt))),
 	)
 	require.Equal(t, amt, sk.Validator(ctx, addr1).GetBondedTokens())
@@ -133,8 +138,8 @@ func TestBeginBlocker(t *testing.T) {
 	require.Equal(t, sdk.Unbonding, validator.GetStatus())
 
 	// Verify that a fine has been added to the penalty account due to the jailing
-	penalties = supplyKeeper.GetModuleAccount(ctx, PenaltyAccount).GetCoins()
-	require.False(t, penalties.IsZero())
+	penaltiesAccountBalance = ck.GetAllBalances(ctx, penaltiesAccount.GetAddress())
+	require.False(t, penaltiesAccountBalance.IsZero())
 
 	// Verify that the penalty is distributed among the remaining validators
 	now = now.Add(5 * time.Minute)
@@ -153,10 +158,11 @@ func TestBeginBlocker(t *testing.T) {
 	BeginBlocker(ctx, req, keeper, batch)
 	batch.Write()
 
-	penalties = supplyKeeper.GetModuleAccount(ctx, PenaltyAccount).GetCoins()
-	require.True(t, penalties.IsZero())
+	penaltiesAccountBalance = ck.GetAllBalances(ctx, penaltiesAccount.GetAddress())
+	require.True(t, penaltiesAccountBalance.IsZero())
 
 	// Penalty should now be in the fee account, ready to be distributed
-	feeAccount := supplyKeeper.GetModuleAccount(ctx, auth.FeeCollectorName).GetCoins()
-	require.False(t, feeAccount.IsZero())
+	feeAccount := supplyKeeper.GetModuleAccount(ctx, auth.FeeCollectorName)
+	feeAccountBalance := ck.GetAllBalances(ctx, feeAccount.GetAddress())
+	require.False(t, feeAccountBalance.IsZero())
 }
