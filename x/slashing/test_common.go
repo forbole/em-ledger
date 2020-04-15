@@ -103,7 +103,7 @@ func createTestInput(t *testing.T, defaults Params, database dbm.DB) (sdk.Contex
 
 	sk := staking.NewKeeper(appCodec, keyStaking, bk, supplyKeeper, paramsKeeper.Subspace(staking.DefaultParamspace))
 	genesis := staking.DefaultGenesisState()
-	sk.SetParams(ctx, staking.DefaultParams()j)
+	sk.SetParams(ctx, staking.DefaultParams())
 
 	// set module accounts
 	feeCollectorAcc := supply.NewEmptyModuleAccount(auth.FeeCollectorName)
