@@ -167,7 +167,7 @@ func NewApp(logger log.Logger, sdkdb db.DB, serverCtx *server.Context, baseAppOp
 	)
 
 	application.slashingKeeper = slashing.NewKeeper(
-		cdc, keys[slashing.StoreKey], &application.stakingKeeper, application.supplyKeeper, auth.FeeCollectorName, slashingSubspace, application.database,
+		appCodec, keys[slashing.StoreKey], &application.stakingKeeper, &application.supplyKeeper, auth.FeeCollectorName, slashingSubspace, application.database,
 	)
 
 	application.stakingKeeper = *application.stakingKeeper.SetHooks(
@@ -204,7 +204,7 @@ func NewApp(logger log.Logger, sdkdb db.DB, serverCtx *server.Context, baseAppOp
 		staking.NewAppModule(application.stakingKeeper, application.accountKeeper, bankKeeperWrapped, application.supplyKeeper),
 		inflation.NewAppModule(application.inflationKeeper),
 		distr.NewAppModule(application.distrKeeper, application.accountKeeper, bankKeeperWrapped, application.supplyKeeper, application.stakingKeeper),
-		slashing.NewAppModule(application.slashingKeeper, application.stakingKeeper),
+		slashing.NewAppModule(application.slashingKeeper, application.accountKeeper, application.bankKeeper, application.stakingKeeper),
 		liquidityprovider.NewAppModule(application.lpKeeper),
 		issuer.NewAppModule(application.issuerKeeper),
 		authority.NewAppModule(application.authorityKeeper),

@@ -1,11 +1,8 @@
-// This software is Copyright (c) 2019 e-Money A/S. It is not offered under an open source license.
-//
-// Please contact partners@e-money.com for licensing related questions.
-
+//noalias
 package types
 
 // Slashing module event types
-var (
+const (
 	EventTypeSlash         = "slash"
 	EventTypeLiveness      = "liveness"
 	EventTypePenaltyPayout = "penalty_payout"

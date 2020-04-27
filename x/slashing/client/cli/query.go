@@ -1,7 +1,3 @@
-// This software is Copyright (c) 2019 e-Money A/S. It is not offered under an open source license.
-//
-// Please contact partners@e-money.com for licensing related questions.
-
 package cli
 
 import (
@@ -48,7 +44,7 @@ func GetCmdQuerySigningInfo(storeName string, cdc *codec.Codec) *cobra.Command {
 		Short: "Query a validator's signing information",
 		Long: strings.TrimSpace(`Use a validators' consensus public key to find the signing-info for that validator:
 
-$ <appcli> query slashing signing-info emoneyvalconspub1zcjduepqfhvwcmt7p06fvdgexxhmz0l8c7sgswl7ulv7aulk364x4g5xsw7sr0k2g5
+$ <appcli> query slashing signing-info cosmosvalconspub1zcjduepqfhvwcmt7p06fvdgexxhmz0l8c7sgswl7ulv7aulk364x4g5xsw7sr0k2g5
 `),
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -72,7 +68,11 @@ $ <appcli> query slashing signing-info emoneyvalconspub1zcjduepqfhvwcmt7p06fvdge
 			}
 
 			var signingInfo types.ValidatorSigningInfo
-			cdc.MustUnmarshalBinaryLengthPrefixed(res, &signingInfo)
+			signingInfo, err = types.UnmarshalValSigningInfo(types.ModuleCdc, res)
+			if err != nil {
+				return err
+			}
+
 			return cliCtx.PrintOutput(signingInfo)
 		},
 	}

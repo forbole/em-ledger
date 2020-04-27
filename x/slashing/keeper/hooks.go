@@ -1,27 +1,26 @@
-// This software is Copyright (c) 2019 e-Money A/S. It is not offered under an open source license.
-//
-// Please contact partners@e-money.com for licensing related questions.
-
 // nolint
-package slashing
+package keeper
 
 import (
-	"github.com/e-money/em-ledger/x/slashing/types"
 	"time"
 
 	"github.com/tendermint/tendermint/crypto"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/e-money/em-ledger/x/slashing/types"
 )
 
 func (k Keeper) AfterValidatorBonded(ctx sdk.Context, address sdk.ConsAddress, _ sdk.ValAddress) {
 	// Update the signing info start height or create a new signing info
-	_, found := k.getValidatorSigningInfo(ctx, address)
+	_, found := k.GetValidatorSigningInfo(ctx, address)
 	if !found {
 		signingInfo := types.NewValidatorSigningInfo(
 			address,
+			ctx.BlockHeight(),
+			0,
 			time.Unix(0, 0),
 			false,
+			0,
 		)
 		k.SetValidatorSigningInfo(ctx, address, signingInfo)
 	}
@@ -30,7 +29,7 @@ func (k Keeper) AfterValidatorBonded(ctx sdk.Context, address sdk.ConsAddress, _
 // When a validator is created, add the address-pubkey relation.
 func (k Keeper) AfterValidatorCreated(ctx sdk.Context, valAddr sdk.ValAddress) {
 	validator := k.sk.Validator(ctx, valAddr)
-	k.addPubkey(ctx, validator.GetConsPubKey())
+	k.AddPubkey(ctx, validator.GetConsPubKey())
 }
 
 // When a validator is removed, delete the address-pubkey relation.

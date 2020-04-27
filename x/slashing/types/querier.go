@@ -1,11 +1,16 @@
-// This software is Copyright (c) 2019 e-Money A/S. It is not offered under an open source license.
-//
-// Please contact partners@e-money.com for licensing related questions.
-
 package types
 
 import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
+)
+
+// DONTCOVER
+
+// Query endpoints supported by the slashing querier
+const (
+	QueryParameters   = "parameters"
+	QuerySigningInfo  = "signingInfo"
+	QuerySigningInfos = "signingInfos"
 )
 
 // QuerySigningInfoParams defines the params for the following queries:
@@ -14,6 +19,7 @@ type QuerySigningInfoParams struct {
 	ConsAddress sdk.ConsAddress
 }
 
+// NewQuerySigningInfoParams creates a new QuerySigningInfoParams instance
 func NewQuerySigningInfoParams(consAddr sdk.ConsAddress) QuerySigningInfoParams {
 	return QuerySigningInfoParams{consAddr}
 }
@@ -24,6 +30,7 @@ type QuerySigningInfosParams struct {
 	Page, Limit int
 }
 
+// NewQuerySigningInfosParams creates a new QuerySigningInfosParams instance
 func NewQuerySigningInfosParams(page, limit int) QuerySigningInfosParams {
 	return QuerySigningInfosParams{page, limit}
 }

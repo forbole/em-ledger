@@ -1,7 +1,3 @@
-// This software is Copyright (c) 2019 e-Money A/S. It is not offered under an open source license.
-//
-// Please contact partners@e-money.com for licensing related questions.
-
 package types
 
 import (
@@ -9,24 +5,20 @@ import (
 	"time"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/cosmos/cosmos-sdk/x/params"
 	paramtypes "github.com/cosmos/cosmos-sdk/x/params/types"
 )
 
 // Default parameter namespace
 const (
-	DefaultParamspace                 = ModuleName
-	DefaultMaxEvidenceAge             = 2 * time.Minute
-	DefaultSignedBlocksWindowDuration = time.Hour
-	DefaultDowntimeJailDuration       = DefaultSignedBlocksWindowDuration
+	DefaultParamspace           = ModuleName
+	DefaultSignedBlocksWindow   = int64(100)
+	DefaultDowntimeJailDuration = 60 * 10 * time.Second
 )
 
-// The Double Sign Jail period ends at Max Time supported by Amino (Dec 31, 9999 - 23:59:59 GMT)
 var (
-	DoubleSignJailEndTime          = time.Unix(253402300799, 0)
-	DefaultMinSignedPerWindow      = sdk.NewDecWithPrec(1, 1)
+	DefaultMinSignedPerWindow      = sdk.NewDecWithPrec(5, 1)
 	DefaultSlashFractionDoubleSign = sdk.NewDec(1).Quo(sdk.NewDec(20))
-	DefaultSlashFractionDowntime   = sdk.NewDec(1).Quo(sdk.NewDec(1000))
+	DefaultSlashFractionDowntime   = sdk.NewDec(1).Quo(sdk.NewDec(100))
 )
 
 // Parameter store keys
@@ -46,47 +38,45 @@ func ParamKeyTable() paramtypes.KeyTable {
 
 // Params - used for initializing default parameter for slashing at genesis
 type Params struct {
-	MaxEvidenceAge             time.Duration `json:"max_evidence_age" yaml:"max_evidence_age"`
-	SignedBlocksWindowDuration time.Duration `json:"signed_blocks_window_duration" yaml:"signed_blocks_window_duration"`
-	MinSignedPerWindow         sdk.Dec       `json:"min_signed_per_window" yaml:"min_signed_per_window"`
-	DowntimeJailDuration       time.Duration `json:"downtime_jail_duration" yaml:"downtime_jail_duration"`
-	SlashFractionDoubleSign    sdk.Dec       `json:"slash_fraction_double_sign" yaml:"slash_fraction_double_sign"`
-	SlashFractionDowntime      sdk.Dec       `json:"slash_fraction_downtime" yaml:"slash_fraction_downtime"`
+	SignedBlocksWindow      int64         `json:"signed_blocks_window" yaml:"signed_blocks_window"`
+	MinSignedPerWindow      sdk.Dec       `json:"min_signed_per_window" yaml:"min_signed_per_window"`
+	DowntimeJailDuration    time.Duration `json:"downtime_jail_duration" yaml:"downtime_jail_duration"`
+	SlashFractionDoubleSign sdk.Dec       `json:"slash_fraction_double_sign" yaml:"slash_fraction_double_sign"`
+	SlashFractionDowntime   sdk.Dec       `json:"slash_fraction_downtime" yaml:"slash_fraction_downtime"`
 }
 
 // NewParams creates a new Params object
-func NewParams(maxEvidenceAge time.Duration, signedBlocksWindowDuration time.Duration,
-	minSignedPerWindow sdk.Dec, downtimeJailDuration time.Duration,
-	slashFractionDoubleSign sdk.Dec, slashFractionDowntime sdk.Dec) Params {
+func NewParams(
+	signedBlocksWindow int64, minSignedPerWindow sdk.Dec, downtimeJailDuration time.Duration,
+	slashFractionDoubleSign, slashFractionDowntime sdk.Dec,
+) Params {
 
 	return Params{
-		MaxEvidenceAge:             maxEvidenceAge,
-		SignedBlocksWindowDuration: signedBlocksWindowDuration,
-		MinSignedPerWindow:         minSignedPerWindow,
-		DowntimeJailDuration:       downtimeJailDuration,
-		SlashFractionDoubleSign:    slashFractionDoubleSign,
-		SlashFractionDowntime:      slashFractionDowntime,
+		SignedBlocksWindow:      signedBlocksWindow,
+		MinSignedPerWindow:      minSignedPerWindow,
+		DowntimeJailDuration:    downtimeJailDuration,
+		SlashFractionDoubleSign: slashFractionDoubleSign,
+		SlashFractionDowntime:   slashFractionDowntime,
 	}
 }
 
+// String implements the stringer interface for Params
 func (p Params) String() string {
 	return fmt.Sprintf(`Slashing Params:
-  MaxEvidenceAge:             %s
-  SignedBlocksWindowDuration: %d
-  MinSignedPerWindow:         %s
-  DowntimeJailDuration:       %s
-  SlashFractionDoubleSign:    %s
-  SlashFractionDowntime:      %s`, p.MaxEvidenceAge,
-		p.SignedBlocksWindowDuration, p.MinSignedPerWindow,
+  SignedBlocksWindow:      %d
+  MinSignedPerWindow:      %s
+  DowntimeJailDuration:    %s
+  SlashFractionDoubleSign: %s
+  SlashFractionDowntime:   %s`,
+		p.SignedBlocksWindow, p.MinSignedPerWindow,
 		p.DowntimeJailDuration, p.SlashFractionDoubleSign,
 		p.SlashFractionDowntime)
 }
 
-// Implements params.ParamSet
-func (p *Params) ParamSetPairs() params.ParamSetPairs {
+// ParamSetPairs - Implements params.ParamSet
+func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 	return paramtypes.ParamSetPairs{
-		//paramtypes.NewParamSetPair(KeyMaxEvidenceAge, &p.MaxEvidenceAge, ),
-		paramtypes.NewParamSetPair(KeySignedBlocksWindowDuration, &p.SignedBlocksWindowDuration, validateSignedBlocksWindowDuration),
+		//paramtypes.NewParamSetPair(KeySignedBlocksWindow, &p.SignedBlocksWindow, validateSignedBlocksWindow),
 		paramtypes.NewParamSetPair(KeyMinSignedPerWindow, &p.MinSignedPerWindow, validateMinSignedPerWindow),
 		paramtypes.NewParamSetPair(KeyDowntimeJailDuration, &p.DowntimeJailDuration, validateDowntimeJailDuration),
 		paramtypes.NewParamSetPair(KeySlashFractionDoubleSign, &p.SlashFractionDoubleSign, validateSlashFractionDoubleSign),
@@ -94,14 +84,22 @@ func (p *Params) ParamSetPairs() params.ParamSetPairs {
 	}
 }
 
-func validateSignedBlocksWindowDuration(i interface{}) error {
-	v, ok := i.(time.Duration)
+// DefaultParams defines the parameters for this module
+func DefaultParams() Params {
+	return NewParams(
+		DefaultSignedBlocksWindow, DefaultMinSignedPerWindow, DefaultDowntimeJailDuration,
+		DefaultSlashFractionDoubleSign, DefaultSlashFractionDowntime,
+	)
+}
+
+func validateSignedBlocksWindow(i interface{}) error {
+	v, ok := i.(int64)
 	if !ok {
 		return fmt.Errorf("invalid parameter type: %T", i)
 	}
 
-	if v.Milliseconds() <= 0 {
-		return fmt.Errorf("signed blocks window duration must be positive: %d", v)
+	if v <= 0 {
+		return fmt.Errorf("signed blocks window must be positive: %d", v)
 	}
 
 	return nil
@@ -166,16 +164,4 @@ func validateSlashFractionDowntime(i interface{}) error {
 	}
 
 	return nil
-}
-
-// Default parameters for this module
-func DefaultParams() Params {
-	return Params{
-		MaxEvidenceAge:             DefaultMaxEvidenceAge,
-		SignedBlocksWindowDuration: DefaultSignedBlocksWindowDuration,
-		MinSignedPerWindow:         DefaultMinSignedPerWindow,
-		DowntimeJailDuration:       DefaultDowntimeJailDuration,
-		SlashFractionDoubleSign:    DefaultSlashFractionDoubleSign,
-		SlashFractionDowntime:      DefaultSlashFractionDowntime,
-	}
 }

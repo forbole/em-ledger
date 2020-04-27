@@ -1,8 +1,4 @@
-// This software is Copyright (c) 2019 e-Money A/S. It is not offered under an open source license.
-//
-// Please contact partners@e-money.com for licensing related questions.
-
-package slashing
+package keeper
 
 import (
 	"time"
@@ -11,37 +7,36 @@ import (
 	"github.com/e-money/em-ledger/x/slashing/types"
 )
 
-// MaxEvidenceAge - max age for evidence
-func (k Keeper) MaxEvidenceAge(ctx sdk.Context) (res time.Duration) {
-	k.paramspace.Get(ctx, types.KeyMaxEvidenceAge, &res)
-	return
-}
-
 // SignedBlocksWindowDuration - sliding window for downtime slashing
 func (k Keeper) SignedBlocksWindowDuration(ctx sdk.Context) (res time.Duration) {
 	k.paramspace.Get(ctx, types.KeySignedBlocksWindowDuration, &res)
 	return
 }
 
-// Downtime slashing threshold
-func (k Keeper) MinSignedPerWindow(ctx sdk.Context) (res sdk.Dec) {
-	k.paramspace.Get(ctx, types.KeyMinSignedPerWindow, &res)
-	return
-}
+// MinSignedPerWindow - minimum blocks signed per window
+//func (k Keeper) MinSignedPerWindow(ctx sdk.Context) int64 {
+//	var minSignedPerWindow sdk.Dec
+//	k.paramspace.Get(ctx, types.KeyMinSignedPerWindow, &minSignedPerWindow)
+//	signedBlocksWindow := k.SignedBlocksWindow(ctx)
+//
+//	// NOTE: RoundInt64 will never panic as minSignedPerWindow is
+//	//       less than 1.
+//	return minSignedPerWindow.MulInt64(signedBlocksWindow).RoundInt64()
+//}
 
-// Downtime unbond duration
+// DowntimeJailDuration - Downtime unbond duration
 func (k Keeper) DowntimeJailDuration(ctx sdk.Context) (res time.Duration) {
 	k.paramspace.Get(ctx, types.KeyDowntimeJailDuration, &res)
 	return
 }
 
-// SlashFractionDoubleSign
+// SlashFractionDoubleSign - fraction of power slashed in case of double sign
 func (k Keeper) SlashFractionDoubleSign(ctx sdk.Context) (res sdk.Dec) {
 	k.paramspace.Get(ctx, types.KeySlashFractionDoubleSign, &res)
 	return
 }
 
-// SlashFractionDowntime
+// SlashFractionDowntime - fraction of power slashed for downtime
 func (k Keeper) SlashFractionDowntime(ctx sdk.Context) (res sdk.Dec) {
 	k.paramspace.Get(ctx, types.KeySlashFractionDowntime, &res)
 	return

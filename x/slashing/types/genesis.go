@@ -1,7 +1,3 @@
-// This software is Copyright (c) 2019 e-Money A/S. It is not offered under an open source license.
-//
-// Please contact partners@e-money.com for licensing related questions.
-
 package types
 
 import (
@@ -36,6 +32,14 @@ type MissedBlock struct {
 	Missed bool  `json:"missed" yaml:"missed"`
 }
 
+// NewMissedBlock creates a new MissedBlock instance
+func NewMissedBlock(index int64, missed bool) MissedBlock {
+	return MissedBlock{
+		Index:  index,
+		Missed: missed,
+	}
+}
+
 // DefaultGenesisState - default GenesisState used by Cosmos Hub
 func DefaultGenesisState() GenesisState {
 	return GenesisState{
@@ -49,33 +53,28 @@ func DefaultGenesisState() GenesisState {
 func ValidateGenesis(data GenesisState) error {
 	downtime := data.Params.SlashFractionDowntime
 	if downtime.IsNegative() || downtime.GT(sdk.OneDec()) {
-		return fmt.Errorf("Slashing fraction downtime should be less than or equal to one and greater than zero, is %s", downtime.String())
+		return fmt.Errorf("slashing fraction downtime should be less than or equal to one and greater than zero, is %s", downtime.String())
 	}
 
 	dblSign := data.Params.SlashFractionDoubleSign
 	if dblSign.IsNegative() || dblSign.GT(sdk.OneDec()) {
-		return fmt.Errorf("Slashing fraction double sign should be less than or equal to one and greater than zero, is %s", dblSign.String())
+		return fmt.Errorf("slashing fraction double sign should be less than or equal to one and greater than zero, is %s", dblSign.String())
 	}
 
 	minSign := data.Params.MinSignedPerWindow
 	if minSign.IsNegative() || minSign.GT(sdk.OneDec()) {
-		return fmt.Errorf("Min signed per window should be less than or equal to one and greater than zero, is %s", minSign.String())
-	}
-
-	maxEvidence := data.Params.MaxEvidenceAge
-	if maxEvidence < 1*time.Minute {
-		return fmt.Errorf("Max evidence age must be at least 1 minute, is %s", maxEvidence.String())
+		return fmt.Errorf("min signed per window should be less than or equal to one and greater than zero, is %s", minSign.String())
 	}
 
 	downtimeJail := data.Params.DowntimeJailDuration
 	if downtimeJail < 1*time.Minute {
-		return fmt.Errorf("Downtime unblond duration must be at least 1 minute, is %s", downtimeJail.String())
+		return fmt.Errorf("downtime unblond duration must be at least 1 minute, is %s", downtimeJail.String())
 	}
 
-	//signedWindow := data.Params.SignedBlocksWindowDuration
-	//if signedWindow < 10 {
-	//	return fmt.Errorf("Signed blocks window must be at least 10, is %d", signedWindow)
-	//}
+	signedWindow := data.Params.SignedBlocksWindow
+	if signedWindow < 10 {
+		return fmt.Errorf("signed blocks window must be at least 10, is %d", signedWindow)
+	}
 
 	return nil
 }

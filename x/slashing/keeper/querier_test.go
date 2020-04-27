@@ -1,21 +1,17 @@
-// This software is Copyright (c) 2019 e-Money A/S. It is not offered under an open source license.
-//
-// Please contact partners@e-money.com for licensing related questions.
-
-package slashing
+package keeper
 
 import (
-	db "github.com/tendermint/tm-db"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	abci "github.com/tendermint/tendermint/abci/types"
 
 	"github.com/cosmos/cosmos-sdk/codec"
+	"github.com/e-money/em-ledger/x/slashing/types"
 )
 
 func TestNewQuerier(t *testing.T) {
-	ctx, _, _, _, keeper, _, _ := createTestInput(t, keeperTestParams(), db.NewMemDB())
+	ctx, _, _, _, keeper := CreateTestInput(t, TestParams())
 	querier := NewQuerier(keeper)
 
 	query := abci.RequestQuery{
@@ -29,9 +25,9 @@ func TestNewQuerier(t *testing.T) {
 
 func TestQueryParams(t *testing.T) {
 	cdc := codec.New()
-	ctx, _, _, _, keeper, _, _ := createTestInput(t, keeperTestParams(), db.NewMemDB())
+	ctx, _, _, _, keeper := CreateTestInput(t, TestParams())
 
-	var params Params
+	var params types.Params
 
 	res, errRes := queryParams(ctx, keeper)
 	require.NoError(t, errRes)

@@ -1,168 +1,97 @@
-// This software is Copyright (c) 2019 e-Money A/S. It is not offered under an open source license.
-//
-// Please contact partners@e-money.com for licensing related questions.
-
-package slashing
+package slashing_test
 
 import (
-	"github.com/cosmos/cosmos-sdk/x/auth"
-	db "github.com/tendermint/tm-db"
 	"testing"
 	"time"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/cosmos/cosmos-sdk/x/staking"
 	"github.com/stretchr/testify/require"
 	abci "github.com/tendermint/tendermint/abci/types"
+
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/cosmos/cosmos-sdk/x/staking"
+	"github.com/e-money/em-ledger/x/slashing"
+	slashingkeeper "github.com/e-money/em-ledger/x/slashing/keeper"
 )
 
 func TestBeginBlocker(t *testing.T) {
-	database := db.NewMemDB()
-	ctx, ck, sk, _, keeper, supplyKeeper, ak := createTestInput(t, DefaultParams(), database)
+	ctx, bk, sk, _, keeper := slashingkeeper.CreateTestInput(t, slashing.DefaultParams())
 	power := int64(100)
 	amt := sdk.TokensFromConsensusPower(power)
-	addr1, pk1 := addrs[2], pks[2]
-	addr2, pk2 := addrs[1], pks[1]
+	addr, pk := slashingkeeper.Addrs[2], slashingkeeper.Pks[2]
 
-	// Ensure accounts exist
-	ak.SetAccount(ctx, ak.NewAccountWithAddress(ctx, sdk.AccAddress(addr1)))
-	ak.SetAccount(ctx, ak.NewAccountWithAddress(ctx, sdk.AccAddress(addr2)))
-
-	// Verify that the penalty account is available and empty
-	penaltiesAccount := supplyKeeper.GetModuleAccount(ctx, PenaltyAccount)
-	penaltiesAccountBalance := ck.GetAllBalances(ctx, penaltiesAccount.GetAddress())
-	require.True(t, penaltiesAccountBalance.IsZero())
-
-	// bond the validators
-	_, err := staking.NewHandler(sk)(ctx, NewTestMsgCreateValidator(addr1, pk1, amt))
+	// bond the validator
+	res, err := staking.NewHandler(sk)(ctx, slashingkeeper.NewTestMsgCreateValidator(addr, pk, amt))
 	require.NoError(t, err)
-	_, err = staking.NewHandler(sk)(ctx, NewTestMsgCreateValidator(addr2, pk2, amt))
-	require.NoError(t, err)
+	require.NotNil(t, res)
 
 	staking.EndBlocker(ctx, sk)
 	require.Equal(
-		t, ck.GetAllBalances(ctx, sdk.AccAddress(addr1)),
-		sdk.NewCoins(sdk.NewCoin(sk.GetParams(ctx).BondDenom, initTokens.Sub(amt))),
+		t, bk.GetAllBalances(ctx, sdk.AccAddress(addr)),
+		sdk.NewCoins(sdk.NewCoin(sk.GetParams(ctx).BondDenom, slashingkeeper.InitTokens.Sub(amt))),
 	)
-	require.Equal(t, amt, sk.Validator(ctx, addr1).GetBondedTokens())
+	require.Equal(t, amt, sk.Validator(ctx, addr).GetBondedTokens())
 
 	val := abci.Validator{
-		Address: pk1.Address(),
-		Power:   amt.Int64(),
-	}
-
-	val2 := abci.Validator{
-		Address: pk2.Address(),
+		Address: pk.Address(),
 		Power:   amt.Int64(),
 	}
 
 	// mark the validator as having signed
 	req := abci.RequestBeginBlock{
 		LastCommitInfo: abci.LastCommitInfo{
-			Votes: []abci.VoteInfo{
-				{
-					Validator:       val,
-					SignedLastBlock: true,
-				},
-				{
-					Validator:       val2,
-					SignedLastBlock: true,
-				},
-			},
+			Votes: []abci.VoteInfo{{
+				Validator:       val,
+				SignedLastBlock: true,
+			}},
 		},
 	}
 
-	batch := database.NewBatch()
-	BeginBlocker(ctx, req, keeper, batch)
-	batch.Write()
+	slashing.BeginBlocker(ctx, req, keeper)
 
-	info, found := keeper.getValidatorSigningInfo(ctx, sdk.ConsAddress(pk1.Address()))
+	info, found := keeper.GetValidatorSigningInfo(ctx, sdk.ConsAddress(pk.Address()))
 	require.True(t, found)
+	require.Equal(t, ctx.BlockHeight(), info.StartHeight)
+	require.Equal(t, int64(1), info.IndexOffset)
 	require.Equal(t, time.Unix(0, 0).UTC(), info.JailedUntil)
-	require.Equal(t, sdk.ConsAddress(pk1.Address()), info.Address)
+	require.Equal(t, int64(0), info.MissedBlocksCounter)
 
 	height := int64(0)
 
-	// for 1000 blocks, mark the validators as having signed
-	now := time.Now()
-	for ; height < 1000; height++ {
-		now = now.Add(5 * time.Minute)
-		ctx = ctx.WithBlockHeight(height).WithBlockTime(now)
+	// for 1000 blocks, mark the validator as having signed
+	for ; height < keeper.SignedBlocksWindow(ctx); height++ {
+		ctx = ctx.WithBlockHeight(height)
 		req = abci.RequestBeginBlock{
 			LastCommitInfo: abci.LastCommitInfo{
-				Votes: []abci.VoteInfo{
-					{
-						Validator:       val,
-						SignedLastBlock: true,
-					},
-					{
-						Validator:       val2,
-						SignedLastBlock: true,
-					},
-				},
+				Votes: []abci.VoteInfo{{
+					Validator:       val,
+					SignedLastBlock: true,
+				}},
 			},
 		}
-		batch = database.NewBatch()
-		BeginBlocker(ctx, req, keeper, batch)
-		batch.Write()
+
+		slashing.BeginBlocker(ctx, req, keeper)
 	}
-	// for 500 blocks, mark the validator as having not signed. Other validator keeps signing.
-	for ; height < 1500; height++ {
-		now = now.Add(time.Minute)
-		ctx = ctx.WithBlockHeight(height).WithBlockTime(now)
+
+	// for 500 blocks, mark the validator as having not signed
+	for ; height < ((keeper.SignedBlocksWindow(ctx) * 2) - keeper.MinSignedPerWindow(ctx) + 1); height++ {
+		ctx = ctx.WithBlockHeight(height)
 		req = abci.RequestBeginBlock{
 			LastCommitInfo: abci.LastCommitInfo{
-				Votes: []abci.VoteInfo{
-					{
-						Validator:       val,
-						SignedLastBlock: false,
-					},
-					{
-						Validator:       val2,
-						SignedLastBlock: true,
-					},
-				},
+				Votes: []abci.VoteInfo{{
+					Validator:       val,
+					SignedLastBlock: false,
+				}},
 			},
 		}
-		batch = database.NewBatch()
-		BeginBlocker(ctx, req, keeper, batch)
-		batch.Write()
+
+		slashing.BeginBlocker(ctx, req, keeper)
 	}
 
 	// end block
 	staking.EndBlocker(ctx, sk)
 
 	// validator should be jailed
-	validator, found := sk.GetValidatorByConsAddr(ctx, sdk.GetConsAddress(pk1))
+	validator, found := sk.GetValidatorByConsAddr(ctx, sdk.GetConsAddress(pk))
 	require.True(t, found)
 	require.Equal(t, sdk.Unbonding, validator.GetStatus())
-
-	// Verify that a fine has been added to the penalty account due to the jailing
-	penaltiesAccountBalance = ck.GetAllBalances(ctx, penaltiesAccount.GetAddress())
-	require.False(t, penaltiesAccountBalance.IsZero())
-
-	// Verify that the penalty is distributed among the remaining validators
-	now = now.Add(5 * time.Minute)
-	ctx = ctx.WithBlockHeight(height).WithBlockTime(now)
-	req = abci.RequestBeginBlock{
-		LastCommitInfo: abci.LastCommitInfo{
-			Votes: []abci.VoteInfo{
-				{
-					Validator:       val2,
-					SignedLastBlock: true,
-				},
-			},
-		},
-	}
-	batch = database.NewBatch()
-	BeginBlocker(ctx, req, keeper, batch)
-	batch.Write()
-
-	penaltiesAccountBalance = ck.GetAllBalances(ctx, penaltiesAccount.GetAddress())
-	require.True(t, penaltiesAccountBalance.IsZero())
-
-	// Penalty should now be in the fee account, ready to be distributed
-	feeAccount := supplyKeeper.GetModuleAccount(ctx, auth.FeeCollectorName)
-	feeAccountBalance := ck.GetAllBalances(ctx, feeAccount.GetAddress())
-	require.False(t, feeAccountBalance.IsZero())
 }

@@ -1,18 +1,17 @@
-// This software is Copyright (c) 2019 e-Money A/S. It is not offered under an open source license.
-//
-// Please contact partners@e-money.com for licensing related questions.
+// +build ignore
 
-// nolint:deadcode unused
-package slashing
+package keeper
+
+// nolint:deadcode,unused
+// DONTCOVER
+// noalias
 
 import (
 	"encoding/hex"
-	"github.com/e-money/em-ledger/x/slashing/types"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/ed25519"
@@ -20,32 +19,33 @@ import (
 	dbm "github.com/tendermint/tm-db"
 
 	"github.com/cosmos/cosmos-sdk/codec"
+	simappcodec "github.com/cosmos/cosmos-sdk/simapp/codec"
 	"github.com/cosmos/cosmos-sdk/store"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/x/auth"
 	"github.com/cosmos/cosmos-sdk/x/bank"
-	"github.com/cosmos/cosmos-sdk/x/params"
+	"github.com/cosmos/cosmos-sdk/x/params/keeper"
+	paramtypes "github.com/cosmos/cosmos-sdk/x/params/types"
 	"github.com/cosmos/cosmos-sdk/x/staking"
 	"github.com/cosmos/cosmos-sdk/x/supply"
-
-	appcodec "github.com/e-money/em-ledger/app/codec"
+	"github.com/e-money/em-ledger/x/slashing/types"
 )
 
 // TODO remove dependencies on staking (should only refer to validator set type from sdk)
 
 var (
-	pks = []crypto.PubKey{
+	Pks = []crypto.PubKey{
 		newPubKey("0B485CFC0EECC619440448436F8FC9DF40566F2369E72400281454CB552AFB50"),
 		newPubKey("0B485CFC0EECC619440448436F8FC9DF40566F2369E72400281454CB552AFB51"),
 		newPubKey("0B485CFC0EECC619440448436F8FC9DF40566F2369E72400281454CB552AFB52"),
 	}
-	addrs = []sdk.ValAddress{
-		sdk.ValAddress(pks[0].Address()),
-		sdk.ValAddress(pks[1].Address()),
-		sdk.ValAddress(pks[2].Address()),
+	Addrs = []sdk.ValAddress{
+		sdk.ValAddress(Pks[0].Address()),
+		sdk.ValAddress(Pks[1].Address()),
+		sdk.ValAddress(Pks[2].Address()),
 	}
-	initTokens = sdk.TokensFromConsensusPower(200)
-	initCoins  = sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, initTokens))
+	InitTokens = sdk.TokensFromConsensusPower(200)
+	initCoins  = sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, InitTokens))
 )
 
 func createTestCodec() *codec.Codec {
@@ -59,77 +59,79 @@ func createTestCodec() *codec.Codec {
 	return cdc
 }
 
-func createTestInput(t *testing.T, defaults Params, database dbm.DB) (sdk.Context, bank.Keeper, staking.Keeper, params.Subspace, Keeper, supply.Keeper, auth.AccountKeeper) {
+func CreateTestInput(t *testing.T, defaults types.Params) (sdk.Context, bank.Keeper, staking.Keeper, paramtypes.Subspace, Keeper) {
 	keyAcc := sdk.NewKVStoreKey(auth.StoreKey)
 	keyBank := sdk.NewKVStoreKey(bank.StoreKey)
 	keyStaking := sdk.NewKVStoreKey(staking.StoreKey)
-	tkeyStaking := sdk.NewTransientStoreKey(staking.TStoreKey)
-	keySlashing := sdk.NewKVStoreKey(StoreKey)
+	keySlashing := sdk.NewKVStoreKey(types.StoreKey)
 	keySupply := sdk.NewKVStoreKey(supply.StoreKey)
-	keyParams := sdk.NewKVStoreKey(params.StoreKey)
-	tkeyParams := sdk.NewTransientStoreKey(params.TStoreKey)
+	keyParams := sdk.NewKVStoreKey(paramtypes.StoreKey)
+	tkeyParams := sdk.NewTransientStoreKey(paramtypes.TStoreKey)
+
 	db := dbm.NewMemDB()
+
 	ms := store.NewCommitMultiStore(db)
 	ms.MountStoreWithDB(keyAcc, sdk.StoreTypeIAVL, db)
 	ms.MountStoreWithDB(keyBank, sdk.StoreTypeIAVL, db)
-	ms.MountStoreWithDB(tkeyStaking, sdk.StoreTypeTransient, nil)
 	ms.MountStoreWithDB(keyStaking, sdk.StoreTypeIAVL, db)
 	ms.MountStoreWithDB(keySupply, sdk.StoreTypeIAVL, db)
 	ms.MountStoreWithDB(keySlashing, sdk.StoreTypeIAVL, db)
 	ms.MountStoreWithDB(keyParams, sdk.StoreTypeIAVL, db)
 	ms.MountStoreWithDB(tkeyParams, sdk.StoreTypeTransient, db)
+
 	err := ms.LoadLatestVersion()
 	require.Nil(t, err)
+
 	ctx := sdk.NewContext(ms, abci.Header{Time: time.Unix(0, 0)}, false, log.NewNopLogger())
 	cdc := createTestCodec()
+	appCodec := simappcodec.NewAppCodec(cdc)
 
-	appCodec := appcodec.NewAppCodec(cdc)
-
-	paramsKeeper := params.NewKeeper(appCodec, keyParams, tkeyParams)
-	accountKeeper := auth.NewAccountKeeper(appCodec, keyAcc, paramsKeeper.Subspace(auth.DefaultParamspace), auth.ProtoBaseAccount)
-
-	bk := bank.NewBaseKeeper(appCodec, keyBank, accountKeeper, paramsKeeper.Subspace(bank.DefaultParamspace), make(map[string]bool))
-	maccPerms := map[string][]string{
-		auth.FeeCollectorName:     nil,
-		staking.NotBondedPoolName: {supply.Burner, supply.Staking},
-		staking.BondedPoolName:    {supply.Burner, supply.Staking},
-		ModuleName:                {supply.Minter},
-		PenaltyAccount:            nil,
-	}
-	supplyKeeper := supply.NewKeeper(appCodec, keySupply, accountKeeper, bk, maccPerms)
-
-	totalSupply := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, initTokens.MulRaw(int64(len(addrs)))))
-	supplyKeeper.SetSupply(ctx, supply.NewSupply(totalSupply))
-
-	sk := staking.NewKeeper(appCodec, keyStaking, bk, supplyKeeper, paramsKeeper.Subspace(staking.DefaultParamspace))
-	genesis := staking.DefaultGenesisState()
-	sk.SetParams(ctx, staking.DefaultParams())
-
-	// set module accounts
 	feeCollectorAcc := supply.NewEmptyModuleAccount(auth.FeeCollectorName)
 	notBondedPool := supply.NewEmptyModuleAccount(staking.NotBondedPoolName, supply.Burner, supply.Staking)
 	bondPool := supply.NewEmptyModuleAccount(staking.BondedPoolName, supply.Burner, supply.Staking)
 
+	blacklistedAddrs := make(map[string]bool)
+	blacklistedAddrs[feeCollectorAcc.GetAddress().String()] = true
+	blacklistedAddrs[notBondedPool.GetAddress().String()] = true
+	blacklistedAddrs[bondPool.GetAddress().String()] = true
+
+	paramsKeeper := keeper.NewKeeper(appCodec, keyParams, tkeyParams)
+	accountKeeper := auth.NewAccountKeeper(appCodec, keyAcc, paramsKeeper.Subspace(auth.DefaultParamspace), auth.ProtoBaseAccount)
+
+	bk := bank.NewBaseKeeper(appCodec, keyBank, accountKeeper, paramsKeeper.Subspace(bank.DefaultParamspace), blacklistedAddrs)
+	maccPerms := map[string][]string{
+		auth.FeeCollectorName:     nil,
+		staking.NotBondedPoolName: {supply.Burner, supply.Staking},
+		staking.BondedPoolName:    {supply.Burner, supply.Staking},
+	}
+	supplyKeeper := supply.NewKeeper(appCodec, keySupply, accountKeeper, bk, maccPerms)
+
+	totalSupply := sdk.NewCoins(sdk.NewCoin(sdk.DefaultBondDenom, InitTokens.MulRaw(int64(len(Addrs)))))
+	supplyKeeper.SetSupply(ctx, supply.NewSupply(totalSupply))
+
+	sk := staking.NewKeeper(staking.ModuleCdc, keyStaking, bk, supplyKeeper, paramsKeeper.Subspace(staking.DefaultParamspace))
+	genesis := staking.DefaultGenesisState()
+
+	// set module accounts
 	supplyKeeper.SetModuleAccount(ctx, feeCollectorAcc)
 	supplyKeeper.SetModuleAccount(ctx, bondPool)
 	supplyKeeper.SetModuleAccount(ctx, notBondedPool)
 
 	_ = staking.InitGenesis(ctx, sk, accountKeeper, bk, supplyKeeper, genesis)
 
-	for _, addr := range addrs {
-		_, err = bk.AddCoins(ctx, sdk.AccAddress(addr), initCoins)
+	for i, addr := range Addrs {
+		addr := sdk.AccAddress(addr)
+		accountKeeper.SetAccount(ctx, auth.NewBaseAccount(addr, Pks[i], uint64(i), 0))
+		require.NoError(t, bk.SetBalances(ctx, addr, initCoins))
 	}
-	require.Nil(t, err)
-	paramstore := paramsKeeper.Subspace(DefaultParamspace)
-	keeper := NewKeeper(cdc, keyStaking, sk, supplyKeeper, auth.FeeCollectorName, paramstore, database)
+
+	paramstore := paramsKeeper.Subspace(types.DefaultParamspace)
+	keeper := NewKeeper(types.ModuleCdc, keySlashing, &sk, paramstore)
+
+	keeper.SetParams(ctx, defaults)
 	sk.SetHooks(keeper.Hooks())
-	keeper.SetParams(ctx, types.DefaultParams())
 
-	require.NotPanics(t, func() {
-		InitGenesis(ctx, keeper, sk, GenesisState{defaults, nil, nil})
-	})
-
-	return ctx, bk, sk, paramstore, keeper, supplyKeeper, accountKeeper
+	return ctx, bk, sk, paramstore, keeper
 }
 
 func newPubKey(pk string) (res crypto.PubKey) {
@@ -138,8 +140,17 @@ func newPubKey(pk string) (res crypto.PubKey) {
 		panic(err)
 	}
 	var pkEd ed25519.PubKeyEd25519
-	copy(pkEd[:], pkBytes[:])
+	copy(pkEd[:], pkBytes)
 	return pkEd
+}
+
+// Have to change these parameters for tests
+// lest the tests take forever
+func TestParams() types.Params {
+	params := types.DefaultParams()
+	params.SignedBlocksWindow = 1000
+	params.DowntimeJailDuration = 60 * 60
+	return params
 }
 
 func NewTestMsgCreateValidator(address sdk.ValAddress, pubKey crypto.PubKey, amt sdk.Int) staking.MsgCreateValidator {
@@ -150,7 +161,7 @@ func NewTestMsgCreateValidator(address sdk.ValAddress, pubKey crypto.PubKey, amt
 	)
 }
 
-func newTestMsgDelegate(delAddr sdk.AccAddress, valAddr sdk.ValAddress, delAmount sdk.Int) staking.MsgDelegate {
+func NewTestMsgDelegate(delAddr sdk.AccAddress, valAddr sdk.ValAddress, delAmount sdk.Int) staking.MsgDelegate {
 	amount := sdk.NewCoin(sdk.DefaultBondDenom, delAmount)
 	return staking.NewMsgDelegate(delAddr, valAddr, amount)
 }
