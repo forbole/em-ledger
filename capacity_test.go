@@ -8,6 +8,7 @@ package emoney
 
 import (
 	"fmt"
+	appcodec "github.com/e-money/em-ledger/app/codec"
 	"sync"
 	"time"
 
@@ -123,15 +124,13 @@ var _ = Describe("Staking", func() {
 
 var (
 	sendMutex sync.Mutex
+
+	sequences = make(map[string]accountNoSequence)
 )
 
 type accountNoSequence struct {
 	AccountNo, Sequence uint64
 }
-
-var (
-	sequences map[string]accountNoSequence = make(map[string]accountNoSequence)
-)
 
 func sendTx(fromKey, toKey nt.Key, amount sdk.Coins, chainID string) (sdk.TxResponse, error) {
 	sendMutex.Lock()
@@ -143,11 +142,18 @@ func sendTx(fromKey, toKey nt.Key, amount sdk.Coins, chainID string) (sdk.TxResp
 	bank.RegisterCodec(cdc)
 	codec.RegisterCrypto(cdc)
 
+	appCodec := appcodec.NewAppCodec(cdc)
+
+	httpClient, err := rpcclient.NewHTTP("tcp://localhost:26657", "/websocket")
+	if err != nil {
+		return sdk.TxResponse{}, err
+	}
+
 	cliCtx := context.NewCLIContext().
 		WithCodec(cdc).
 		//WithBroadcastMode("block").
 		WithBroadcastMode("async").
-		WithClient(rpcclient.NewHTTP("tcp://localhost:26657", "/websocket"))
+		WithClient(httpClient)
 
 	to, err := sdk.AccAddressFromBech32(toKey.GetAddress())
 	if err != nil {
@@ -164,7 +170,7 @@ func sendTx(fromKey, toKey nt.Key, amount sdk.Coins, chainID string) (sdk.TxResp
 		present bool
 	)
 	if accInfo, present = sequences[fromKey.GetAddress()]; !present {
-		accountNumber, sequence, err := atypes.NewAccountRetriever(cliCtx).GetAccountNumberSequence(from)
+		accountNumber, sequence, err := atypes.NewAccountRetriever(appCodec, cliCtx).GetAccountNumberSequence(from)
 		if err != nil {
 			return sdk.TxResponse{}, err
 		}
@@ -181,7 +187,7 @@ func sendTx(fromKey, toKey nt.Key, amount sdk.Coins, chainID string) (sdk.TxResp
 		Amount:      amount,
 	}
 
-	txBldr := auth.NewTxBuilderFromCLI().
+	txBldr := auth.NewTxBuilderFromCLI(nil).
 		WithTxEncoder(client.GetTxEncoder(cdc)).
 		WithChainID(chainID).
 		WithAccountNumber(accInfo.AccountNo).
