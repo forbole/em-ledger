@@ -10,9 +10,9 @@ import (
 
 // Default parameter namespace
 const (
-	DefaultParamspace           = ModuleName
-	DefaultSignedBlocksWindow   = int64(100)
-	DefaultDowntimeJailDuration = 60 * 10 * time.Second
+	DefaultParamspace                 = ModuleName
+	DefaultSignedBlocksWindowDuration = time.Hour
+	DefaultDowntimeJailDuration       = DefaultSignedBlocksWindowDuration
 )
 
 var (
@@ -38,37 +38,36 @@ func ParamKeyTable() paramtypes.KeyTable {
 
 // Params - used for initializing default parameter for slashing at genesis
 type Params struct {
-	SignedBlocksWindow      int64         `json:"signed_blocks_window" yaml:"signed_blocks_window"`
-	MinSignedPerWindow      sdk.Dec       `json:"min_signed_per_window" yaml:"min_signed_per_window"`
-	DowntimeJailDuration    time.Duration `json:"downtime_jail_duration" yaml:"downtime_jail_duration"`
-	SlashFractionDoubleSign sdk.Dec       `json:"slash_fraction_double_sign" yaml:"slash_fraction_double_sign"`
-	SlashFractionDowntime   sdk.Dec       `json:"slash_fraction_downtime" yaml:"slash_fraction_downtime"`
+	SignedBlocksWindowDuration time.Duration `json:"signed_blocks_window_duration" yaml:"signed_blocks_window_duration"`
+	MinSignedPerWindow         sdk.Dec       `json:"min_signed_per_window" yaml:"min_signed_per_window"`
+	DowntimeJailDuration       time.Duration `json:"downtime_jail_duration" yaml:"downtime_jail_duration"`
+	SlashFractionDoubleSign    sdk.Dec       `json:"slash_fraction_double_sign" yaml:"slash_fraction_double_sign"`
+	SlashFractionDowntime      sdk.Dec       `json:"slash_fraction_downtime" yaml:"slash_fraction_downtime"`
 }
 
 // NewParams creates a new Params object
 func NewParams(
-	signedBlocksWindow int64, minSignedPerWindow sdk.Dec, downtimeJailDuration time.Duration,
+	signedBlocksWindowDuration time.Duration, minSignedPerWindow sdk.Dec, downtimeJailDuration time.Duration,
 	slashFractionDoubleSign, slashFractionDowntime sdk.Dec,
 ) Params {
-
 	return Params{
-		SignedBlocksWindow:      signedBlocksWindow,
-		MinSignedPerWindow:      minSignedPerWindow,
-		DowntimeJailDuration:    downtimeJailDuration,
-		SlashFractionDoubleSign: slashFractionDoubleSign,
-		SlashFractionDowntime:   slashFractionDowntime,
+		SignedBlocksWindowDuration: signedBlocksWindowDuration,
+		MinSignedPerWindow:         minSignedPerWindow,
+		DowntimeJailDuration:       downtimeJailDuration,
+		SlashFractionDoubleSign:    slashFractionDoubleSign,
+		SlashFractionDowntime:      slashFractionDowntime,
 	}
 }
 
 // String implements the stringer interface for Params
 func (p Params) String() string {
 	return fmt.Sprintf(`Slashing Params:
-  SignedBlocksWindow:      %d
-  MinSignedPerWindow:      %s
-  DowntimeJailDuration:    %s
-  SlashFractionDoubleSign: %s
-  SlashFractionDowntime:   %s`,
-		p.SignedBlocksWindow, p.MinSignedPerWindow,
+  SignedBlocksWindowDuration: %d
+  MinSignedPerWindow:         %s
+  DowntimeJailDuration:       %s
+  SlashFractionDoubleSign:    %s
+  SlashFractionDowntime:      %s`,
+		p.SignedBlocksWindowDuration, p.MinSignedPerWindow,
 		p.DowntimeJailDuration, p.SlashFractionDoubleSign,
 		p.SlashFractionDowntime)
 }
@@ -77,6 +76,7 @@ func (p Params) String() string {
 func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 	return paramtypes.ParamSetPairs{
 		//paramtypes.NewParamSetPair(KeySignedBlocksWindow, &p.SignedBlocksWindow, validateSignedBlocksWindow),
+		paramtypes.NewParamSetPair(KeySignedBlocksWindowDuration, &p.SignedBlocksWindowDuration, validateSignedBlocksWindowDuration),
 		paramtypes.NewParamSetPair(KeyMinSignedPerWindow, &p.MinSignedPerWindow, validateMinSignedPerWindow),
 		paramtypes.NewParamSetPair(KeyDowntimeJailDuration, &p.DowntimeJailDuration, validateDowntimeJailDuration),
 		paramtypes.NewParamSetPair(KeySlashFractionDoubleSign, &p.SlashFractionDoubleSign, validateSlashFractionDoubleSign),
@@ -87,19 +87,19 @@ func (p *Params) ParamSetPairs() paramtypes.ParamSetPairs {
 // DefaultParams defines the parameters for this module
 func DefaultParams() Params {
 	return NewParams(
-		DefaultSignedBlocksWindow, DefaultMinSignedPerWindow, DefaultDowntimeJailDuration,
+		DefaultSignedBlocksWindowDuration, DefaultMinSignedPerWindow, DefaultDowntimeJailDuration,
 		DefaultSlashFractionDoubleSign, DefaultSlashFractionDowntime,
 	)
 }
 
-func validateSignedBlocksWindow(i interface{}) error {
-	v, ok := i.(int64)
+func validateSignedBlocksWindowDuration(i interface{}) error {
+	v, ok := i.(time.Duration)
 	if !ok {
 		return fmt.Errorf("invalid parameter type: %T", i)
 	}
 
-	if v <= 0 {
-		return fmt.Errorf("signed blocks window must be positive: %d", v)
+	if v.Milliseconds() <= 0 {
+		return fmt.Errorf("signed blocks window duration must be positive: %d", v)
 	}
 
 	return nil

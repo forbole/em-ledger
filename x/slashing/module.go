@@ -158,7 +158,8 @@ func (AppModule) EndBlock(_ sdk.Context, _ abci.RequestEndBlock) []abci.Validato
 
 // GenerateGenesisState creates a randomized GenState of the slashing module.
 func (AppModule) GenerateGenesisState(simState *module.SimulationState) {
-	simulation.RandomizedGenState(simState)
+	panic("Disabled")
+	//simulation.RandomizedGenState(simState)
 }
 
 // ProposalContents doesn't return any content functions for governance proposals.
@@ -168,7 +169,8 @@ func (AppModule) ProposalContents(_ module.SimulationState) []sim.WeightedPropos
 
 // RandomizedParams creates randomized slashing param changes for the simulator.
 func (AppModule) RandomizedParams(r *rand.Rand) []sim.ParamChange {
-	return simulation.ParamChanges(r)
+	panic("Disabled")
+	// return simulation.ParamChanges(r)
 }
 
 // RegisterStoreDecoder registers a decoder for slashing module's types

@@ -199,7 +199,7 @@ func (t *Testnet) updateGenesis() {
 	// Tighten slashing conditions.
 	bz, _ = sjson.SetBytes(bz, "app_state.slashing.params.min_signed_per_window", "0.3")
 
-	window := time.Duration(10 * time.Second).Milliseconds()
+	window := time.Duration(10 * time.Second).Nanoseconds()
 	bz, _ = sjson.SetBytes(bz, "app_state.slashing.params.signed_blocks_window_duration", fmt.Sprint(window))
 
 	// Reduce jail time to be able to test unjailing

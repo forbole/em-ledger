@@ -42,7 +42,6 @@ func BeginBlocker(ctx sdk.Context, req abci.RequestBeginBlock, k distr.Keeper, s
 	// ref https://github.com/cosmos/cosmos-sdk/issues/3095
 	if ctx.BlockHeight() > 1 {
 		feeCollector := sk.GetModuleAccount(ctx, auth.FeeCollectorName)
-		//coins := feeCollector.GetCoins()
 		coins := bk.GetAllBalances(ctx, feeCollector.GetAddress())
 
 		// Only call AllocateTokens if there are in fact tokens to allocate.

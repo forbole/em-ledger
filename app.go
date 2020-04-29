@@ -113,6 +113,7 @@ func NewApp(logger log.Logger, sdkdb db.DB, serverCtx *server.Context, baseAppOp
 
 	application := &emoneyApp{
 		BaseApp:  bApp,
+		cdc:      cdc,
 		database: createApplicationDatabase(serverCtx),
 	}
 
@@ -120,6 +121,7 @@ func NewApp(logger log.Logger, sdkdb db.DB, serverCtx *server.Context, baseAppOp
 	keys := sdk.NewKVStoreKeys(
 		appName,
 		auth.StoreKey,
+		bank.StoreKey,
 		params.StoreKey,
 		staking.StoreKey,
 		inflation.StoreKey,
@@ -147,6 +149,9 @@ func NewApp(logger log.Logger, sdkdb db.DB, serverCtx *server.Context, baseAppOp
 	bankKeeper := bank.NewBaseKeeper(
 		appCodec, keys[bank.StoreKey], application.accountKeeper, bankSubspace, accountBlacklist,
 	)
+
+	// TODO Wrap?
+	application.bankKeeper = bankKeeper
 
 	application.supplyKeeper = supply.NewKeeper(
 		appCodec, keys[supply.StoreKey], application.accountKeeper, bankKeeper, maccPerms,

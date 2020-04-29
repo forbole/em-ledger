@@ -8,17 +8,17 @@ import (
 )
 
 const (
-	ModuleName                  = types.ModuleName
-	StoreKey                    = types.StoreKey
-	RouterKey                   = types.RouterKey
-	QuerierRoute                = types.QuerierRoute
-	DefaultParamspace           = types.DefaultParamspace
-	PenaltyAccount              = types.PenaltyAccount
-	DefaultSignedBlocksWindow   = types.DefaultSignedBlocksWindow
-	DefaultDowntimeJailDuration = types.DefaultDowntimeJailDuration
-	QueryParameters             = types.QueryParameters
-	QuerySigningInfo            = types.QuerySigningInfo
-	QuerySigningInfos           = types.QuerySigningInfos
+	ModuleName                        = types.ModuleName
+	StoreKey                          = types.StoreKey
+	RouterKey                         = types.RouterKey
+	QuerierRoute                      = types.QuerierRoute
+	DefaultParamspace                 = types.DefaultParamspace
+	PenaltyAccount                    = types.PenaltyAccount
+	DefaultSignedBlocksWindowDuration = types.DefaultSignedBlocksWindowDuration
+	DefaultDowntimeJailDuration       = types.DefaultDowntimeJailDuration
+	QueryParameters                   = types.QueryParameters
+	QuerySigningInfo                  = types.QuerySigningInfo
+	QuerySigningInfos                 = types.QuerySigningInfos
 
 	EventTypeSlash                 = types.EventTypeSlash
 	EventTypeLiveness              = types.EventTypeLiveness
