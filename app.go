@@ -31,7 +31,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/bank"
 	distr "github.com/cosmos/cosmos-sdk/x/distribution"
 	"github.com/cosmos/cosmos-sdk/x/genutil"
-	"github.com/cosmos/cosmos-sdk/x/ibc"
+	//"github.com/cosmos/cosmos-sdk/x/ibc"
 	"github.com/cosmos/cosmos-sdk/x/params"
 	"github.com/cosmos/cosmos-sdk/x/staking"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
@@ -98,7 +98,7 @@ type emoneyApp struct {
 	issuerKeeper    issuer.Keeper
 	authorityKeeper authority.Keeper
 	marketKeeper    *market.Keeper
-	ibcKeeper       ibc.Keeper
+	//ibcKeeper       ibc.Keeper
 
 	mm *module.Manager
 }
@@ -195,7 +195,7 @@ func NewApp(logger log.Logger, sdkdb db.DB, serverCtx *server.Context, baseAppOp
 		application.cdc, keys[market.StoreKey], application.accountKeeper, bankKeeperWrapped, application.supplyKeeper, application.authorityKeeper,
 	)
 
-	application.ibcKeeper = ibc.NewKeeper(cdc, keys[ibc.StoreKey], application.stakingKeeper)
+	//application.ibcKeeper = ibc.NewKeeper(cdc, keys[ibc.StoreKey], application.stakingKeeper)
 
 	application.MountKVStores(keys)
 	application.MountTransientStores(tkeys)

@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cosmos/cosmos-sdk/x/auth"
-	"github.com/cosmos/cosmos-sdk/x/auth/client"
+	client "github.com/cosmos/cosmos-sdk/x/auth/client/utils"
 	"github.com/e-money/em-ledger/x/liquidityprovider/types"
 
 	"github.com/cosmos/cosmos-sdk/client/context"
