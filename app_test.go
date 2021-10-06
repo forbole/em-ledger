@@ -58,7 +58,7 @@ func getEmSimApp(
 	for acc := range maccPerms {
 		require.True(
 			t,
-			app.bankKeeper.BlockedAddr(app.accountKeeper.GetModuleAddress(acc)),
+			app.BankKeeper.BlockedAddr(app.AccountKeeper.GetModuleAddress(acc)),
 			"ensure that blocked addresses are properly set in bank keeper",
 		)
 	}
@@ -170,7 +170,7 @@ func Test_Upgrade(t *testing.T) {
 			},
 			setupUpgCond: func(simApp emAppTests, plan *upgradetypes.Plan) {
 
-				_, err := simApp.app.authorityKeeper.ScheduleUpgrade(
+				_, err := simApp.app.AuthorityKeeper.ScheduleUpgrade(
 					simApp.ctx, simApp.authority, upgradetypes.Plan{
 						Name:   "alt-good",
 						Info:   "new text here",
@@ -189,7 +189,7 @@ func Test_Upgrade(t *testing.T) {
 				Height: 123450000,
 			},
 			setupUpgCond: func(simApp emAppTests, plan *upgradetypes.Plan) {
-				_, err := simApp.app.authorityKeeper.ScheduleUpgrade(
+				_, err := simApp.app.AuthorityKeeper.ScheduleUpgrade(
 					simApp.ctx, simApp.authority, upgradetypes.Plan{
 						Name:   "alt-good",
 						Info:   "new text here",
@@ -208,7 +208,7 @@ func Test_Upgrade(t *testing.T) {
 				Height: 543210000,
 			},
 			setupUpgCond: func(simApp emAppTests, plan *upgradetypes.Plan) {
-				_, err := simApp.app.authorityKeeper.ScheduleUpgrade(
+				_, err := simApp.app.AuthorityKeeper.ScheduleUpgrade(
 					simApp.ctx, simApp.authority, upgradetypes.Plan{
 						Name:   "alt-good",
 						Info:   "new text here",
@@ -256,8 +256,8 @@ func Test_Upgrade(t *testing.T) {
 				Height: 123450000,
 			},
 			setupUpgCond: func(simEmApp emAppTests, plan *upgradetypes.Plan) {
-				simEmApp.app.upgradeKeeper.SetUpgradeHandler("all-good", func(_ sdk.Context, _ upgradetypes.Plan) {})
-				simEmApp.app.upgradeKeeper.ApplyUpgrade(
+				simEmApp.app.UpgradeKeeper.SetUpgradeHandler("all-good", func(_ sdk.Context, _ upgradetypes.Plan) {})
+				simEmApp.app.UpgradeKeeper.ApplyUpgrade(
 					simEmApp.ctx, upgradetypes.Plan{
 						Name:   "all-good",
 						Info:   "some text here",
@@ -278,10 +278,10 @@ func Test_Upgrade(t *testing.T) {
 
 				// schedule upgrade plan
 				var err error
-				_, err = tt.suite.app.authorityKeeper.ScheduleUpgrade(
+				_, err = tt.suite.app.AuthorityKeeper.ScheduleUpgrade(
 					tt.suite.ctx, tt.suite.authority, tt.plan,
 				)
-				schedPlan, hasPlan := tt.suite.app.authorityKeeper.GetUpgradePlan(tt.suite.ctx)
+				schedPlan, hasPlan := tt.suite.app.AuthorityKeeper.GetUpgradePlan(tt.suite.ctx)
 
 				// validate plan side effect
 				if tt.expSchedPass {
@@ -296,8 +296,8 @@ func Test_Upgrade(t *testing.T) {
 				// apply and confirm plan deletion
 				if tt.expSchedPass {
 					executePlan(
-						tt.suite.ctx, t, tt.suite.app.upgradeKeeper,
-						tt.suite.app.authorityKeeper, tt.plan,
+						tt.suite.ctx, t, tt.suite.app.UpgradeKeeper,
+						tt.suite.app.AuthorityKeeper, tt.plan,
 					)
 				}
 			},
@@ -347,10 +347,10 @@ func Test_UpgradeByTime(t *testing.T) {
 
 				// schedule upgrade plan
 				var err error
-				_, err = tt.suite.app.authorityKeeper.ScheduleUpgrade(
+				_, err = tt.suite.app.AuthorityKeeper.ScheduleUpgrade(
 					tt.suite.ctx, tt.suite.authority, tt.plan,
 				)
-				schedPlan, hasPlan := tt.suite.app.authorityKeeper.GetUpgradePlan(tt.suite.ctx)
+				schedPlan, hasPlan := tt.suite.app.AuthorityKeeper.GetUpgradePlan(tt.suite.ctx)
 
 				// validate plan side effect
 				if tt.expPass {
@@ -374,7 +374,7 @@ func Test_UpgradeByTime(t *testing.T) {
 				}
 
 				// advance chain and confirm plan execution
-				tt.suite.app.authorityKeeper.GetUpgradePlan(tt.suite.ctx)
+				tt.suite.app.AuthorityKeeper.GetUpgradePlan(tt.suite.ctx)
 				for _, blockTime := range tt.blockTimes {
 					tt.suite.ctx = tt.suite.ctx.WithBlockTime(blockTime)
 					require.Falsef(t, schedPlan.ShouldExecute(tt.suite.ctx), "premature timing for executing plan")
@@ -384,8 +384,8 @@ func Test_UpgradeByTime(t *testing.T) {
 				require.Truef(t, schedPlan.ShouldExecute(tt.suite.ctx), "plan should be ripe for execution")
 
 				executePlan(
-					tt.suite.ctx, t, tt.suite.app.upgradeKeeper,
-					tt.suite.app.authorityKeeper, tt.plan,
+					tt.suite.ctx, t, tt.suite.app.UpgradeKeeper,
+					tt.suite.app.AuthorityKeeper, tt.plan,
 				)
 			},
 		)
